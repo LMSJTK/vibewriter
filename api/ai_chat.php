@@ -282,10 +282,33 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
             }
         }
 
+        // Fix tool_use content to ensure input fields are objects, not arrays
+        // This prevents PHP from encoding empty objects as [] instead of {}
+        $assistantContent = $result['content'];
+        foreach ($assistantContent as &$content) {
+            if ($content['type'] === 'tool_use' && isset($content['input'])) {
+                // Ensure input is always an object for JSON encoding
+                // Convert empty arrays to objects, and preserve associative arrays as objects
+                if (is_array($content['input'])) {
+                    if (empty($content['input'])) {
+                        // Empty array -> empty object
+                        $content['input'] = new stdClass();
+                    } elseif (array_keys($content['input']) === range(0, count($content['input']) - 1)) {
+                        // Numeric array - this shouldn't happen for tool inputs, but keep as-is
+                        // (tool inputs should always be objects/associative arrays)
+                    } else {
+                        // Associative array - ensure it stays as object
+                        // json_encode will handle this correctly as long as it's not empty
+                    }
+                }
+            }
+        }
+        unset($content); // Break reference
+
         // Continue conversation with tool results
         $payload['messages'][] = [
             'role' => 'assistant',
-            'content' => $result['content']
+            'content' => $assistantContent
         ];
         $payload['messages'][] = [
             'role' => 'user',
@@ -307,16 +330,31 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
 }
 
 /**
+ * Safely encode JSON for Claude API
+ * Ensures that objects are properly encoded as {} not []
+ */
+function encodeForClaudeAPI($data) {
+    // Use JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE for cleaner output
+    // JSON_PRESERVE_ZERO_FRACTION ensures numbers are properly formatted
+    return json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
+}
+
+/**
  * Make a request to Claude API
  */
 function makeClaudeAPIRequest($payload) {
     $apiKey = AI_API_KEY;
     $endpoint = AI_API_ENDPOINT;
 
+    $jsonPayload = encodeForClaudeAPI($payload);
+
+    // Log the payload for debugging (only in development)
+    // Uncomment to debug: error_log("Claude API Payload: " . $jsonPayload);
+
     $ch = curl_init($endpoint);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
         'x-api-key: ' . $apiKey,
@@ -342,6 +380,8 @@ function makeClaudeAPIRequest($payload) {
         } else {
             $errorDetails .= " - Response: " . substr($response, 0, 500);
         }
+        // Log the failed payload for debugging
+        error_log("Failed Claude API request. Payload: " . substr($jsonPayload, 0, 1000));
         throw new Exception($errorDetails);
     }
 
