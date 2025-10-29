@@ -333,6 +333,11 @@ async function sendAIMessage() {
 
         if (result.success) {
             addAIMessage(result.response);
+
+            // Show notification if items were created
+            if (result.items_created && result.items_created.length > 0) {
+                showBinderUpdateNotification(result.items_created);
+            }
         } else {
             let errorMessage = 'Sorry, I encountered an error. Please try again.';
             if (result.message) {
@@ -404,6 +409,84 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Show notification when AI creates binder items
+function showBinderUpdateNotification(items) {
+    // Remove existing notification if any
+    const existing = document.getElementById('binderUpdateNotification');
+    if (existing) {
+        existing.remove();
+    }
+
+    // Create notification banner
+    const notification = document.createElement('div');
+    notification.id = 'binderUpdateNotification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 60px;
+        right: 20px;
+        background: #4CAF50;
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        max-width: 350px;
+        animation: slideIn 0.3s ease-out;
+    `;
+
+    const itemsList = items.map(item => `${item.type}: "${item.title}"`).join(', ');
+    notification.innerHTML = `
+        <div style="margin-bottom: 10px;">
+            <strong>✓ Binder Updated</strong><br>
+            <small>Created: ${itemsList}</small>
+        </div>
+        <button onclick="location.reload()" style="
+            background: white;
+            color: #4CAF50;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-right: 10px;
+        ">Refresh to See</button>
+        <button onclick="this.parentElement.remove()" style="
+            background: transparent;
+            color: white;
+            border: 1px solid white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        ">Dismiss</button>
+    `;
+
+    document.body.appendChild(notification);
+
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Auto-dismiss after 15 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.style.animation = 'slideIn 0.3s ease-out reverse';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 15000);
+}
 
 // Utility functions
 function escapeHtml(text) {
