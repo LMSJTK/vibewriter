@@ -1,0 +1,82 @@
+# VibeWriter .htaccess
+# Apache configuration for clean URLs and security
+
+# Enable rewrite engine
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Redirect to HTTPS (uncomment in production)
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Prevent directory listing
+    Options -Indexes
+
+    # Protect sensitive files
+    <FilesMatch "^(config|includes|database)/.*\.php$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Security Headers
+<IfModule mod_headers.c>
+    # Prevent clickjacking
+    Header always append X-Frame-Options SAMEORIGIN
+
+    # XSS Protection
+    Header set X-XSS-Protection "1; mode=block"
+
+    # Prevent MIME sniffing
+    Header set X-Content-Type-Options nosniff
+
+    # Referrer Policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# PHP Configuration
+<IfModule mod_php7.c>
+    # Hide PHP version
+    php_flag expose_php Off
+
+    # Error handling
+    php_flag display_errors Off
+    php_flag log_errors On
+
+    # Session security
+    php_value session.cookie_httponly 1
+    php_value session.use_strict_mode 1
+</IfModule>
+
+# File upload protection
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps|exe|bat|sh)$">
+    <IfModule mod_headers.c>
+        Header set Content-Disposition attachment
+    </IfModule>
+</FilesMatch>
+
+# Protect uploads directory
+<Directory "uploads">
+    Options -ExecCGI
+    AddHandler cgi-script .php .phtml .php3 .php4 .php5 .php7 .phps .exe .bat .sh
+    deny from all
+    <FilesMatch "\.(jpg|jpeg|png|gif|pdf|doc|docx)$">
+        allow from all
+    </FilesMatch>
+</Directory>
+
+# Cache control for static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+</IfModule>
+
+# Compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json
+</IfModule>
