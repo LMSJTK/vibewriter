@@ -103,18 +103,34 @@ function buildAIContext($book, $itemId) {
         }
     }
 
-    $context .= "\nYou have the ability to create items in the book's binder structure. When the user asks you to:\n";
-    $context .= "- Create, add, or outline chapters, scenes, or other sections\n";
-    $context .= "- Organize their book structure\n";
-    $context .= "- Break down the story into parts\n";
-    $context .= "\nUse the create_binder_item tool to actually create these items. Item types available:\n";
-    $context .= "- 'chapter': For book chapters\n";
-    $context .= "- 'scene': For individual scenes within chapters\n";
-    $context .= "- 'folder': For organizing multiple items together\n";
-    $context .= "- 'note': For notes and ideas\n";
-    $context .= "- 'research': For research materials\n";
-    $context .= "\nAfter creating items, mention what you created so the user knows the binder has been updated.\n";
-    $context .= "\nProvide helpful, creative assistance for writing this book. Be encouraging and specific in your suggestions.";
+    $context .= "\nYou have full access to manage the book's binder structure. You can:\n\n";
+
+    $context .= "READ binder items:\n";
+    $context .= "- Use 'read_binder_items' to see all existing chapters, scenes, and sections\n";
+    $context .= "- Use 'read_binder_item' to examine the detailed content of a specific item\n";
+    $context .= "- Check existing content before making suggestions or creating new items\n\n";
+
+    $context .= "CREATE new items:\n";
+    $context .= "- Use 'create_binder_item' to add chapters, scenes, notes, research, or folders\n";
+    $context .= "- Item types: 'chapter', 'scene', 'folder', 'note', 'research'\n";
+    $context .= "- You can add initial content, synopsis, and nest items under parents\n\n";
+
+    $context .= "UPDATE existing items:\n";
+    $context .= "- Use 'update_binder_item' to modify titles, content, synopsis, status, or labels\n";
+    $context .= "- Update content to add or revise writing\n";
+    $context .= "- Change status to track progress (e.g., 'draft', 'in_progress', 'complete')\n\n";
+
+    $context .= "DELETE items:\n";
+    $context .= "- Use 'delete_binder_item' to remove items (this will also delete all children)\n";
+    $context .= "- Always confirm with the user before deleting important content\n\n";
+
+    $context .= "When working with the binder:\n";
+    $context .= "- Read existing items first to understand what's already there\n";
+    $context .= "- Tell the user what actions you're taking (creating, updating, deleting)\n";
+    $context .= "- Be specific about which items you're working with (use titles and IDs)\n";
+    $context .= "- Organize content logically using folders and proper nesting\n\n";
+
+    $context .= "Provide helpful, creative assistance for writing this book. Be encouraging and specific in your suggestions.";
 
     return $context;
 }
@@ -128,6 +144,33 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
 
     // Define tools available to the AI
     $tools = [
+        [
+            'name' => 'read_binder_items',
+            'description' => 'Reads all items in the book\'s binder structure. Use this to see what chapters, scenes, and other items already exist in the book. Returns the hierarchical structure with all items.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'parent_id' => [
+                        'type' => 'number',
+                        'description' => 'Optional: Filter to only show children of a specific parent item'
+                    ]
+                ]
+            ]
+        ],
+        [
+            'name' => 'read_binder_item',
+            'description' => 'Reads detailed information about a specific binder item including its title, type, synopsis, content, and metadata. Use this to examine the details of a particular chapter, scene, or other item.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'item_id' => [
+                        'type' => 'number',
+                        'description' => 'The ID of the item to read'
+                    ]
+                ],
+                'required' => ['item_id']
+            ]
+        ],
         [
             'name' => 'create_binder_item',
             'description' => 'Creates a new item in the book\'s binder structure (chapter, scene, note, etc.). Use this when the user asks you to create, add, or outline new sections of their book.',
@@ -147,12 +190,64 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
                         'type' => 'string',
                         'description' => 'A brief synopsis or description of this item (optional)'
                     ],
+                    'content' => [
+                        'type' => 'string',
+                        'description' => 'The initial content for this item (optional)'
+                    ],
                     'parent_id' => [
                         'type' => 'number',
                         'description' => 'The ID of the parent item to nest this under (optional, defaults to root level)'
                     ]
                 ],
                 'required' => ['title', 'item_type']
+            ]
+        ],
+        [
+            'name' => 'update_binder_item',
+            'description' => 'Updates an existing binder item. Can update title, synopsis, content, status, label, or metadata. Use this to modify, edit, or revise existing chapters, scenes, or other items.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'item_id' => [
+                        'type' => 'number',
+                        'description' => 'The ID of the item to update'
+                    ],
+                    'title' => [
+                        'type' => 'string',
+                        'description' => 'New title for the item (optional)'
+                    ],
+                    'synopsis' => [
+                        'type' => 'string',
+                        'description' => 'New synopsis/description (optional)'
+                    ],
+                    'content' => [
+                        'type' => 'string',
+                        'description' => 'New content for the item (optional)'
+                    ],
+                    'status' => [
+                        'type' => 'string',
+                        'description' => 'New status (e.g., "draft", "in_progress", "complete") (optional)'
+                    ],
+                    'label' => [
+                        'type' => 'string',
+                        'description' => 'New label/tag for the item (optional)'
+                    ]
+                ],
+                'required' => ['item_id']
+            ]
+        ],
+        [
+            'name' => 'delete_binder_item',
+            'description' => 'Deletes a binder item and all its children. Use this carefully when the user wants to remove a chapter, scene, or other item from their book.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'item_id' => [
+                        'type' => 'number',
+                        'description' => 'The ID of the item to delete'
+                    ]
+                ],
+                'required' => ['item_id']
             ]
         ]
     ];
@@ -267,11 +362,125 @@ function handleToolUse($toolUse, $bookId, $itemId) {
     $input = $toolUse['input'];
 
     switch ($toolName) {
+        case 'read_binder_items':
+            return readBinderItemsFromAI($bookId, $input);
+
+        case 'read_binder_item':
+            return readBinderItemFromAI($input, $bookId);
+
         case 'create_binder_item':
             return createBinderItemFromAI($input, $bookId);
 
+        case 'update_binder_item':
+            return updateBinderItemFromAI($input, $bookId);
+
+        case 'delete_binder_item':
+            return deleteBinderItemFromAI($input, $bookId);
+
         default:
             return ['success' => false, 'error' => 'Unknown tool: ' . $toolName];
+    }
+}
+
+/**
+ * Read all binder items from AI request
+ */
+function readBinderItemsFromAI($bookId, $input) {
+    require_once __DIR__ . '/../includes/book_items.php';
+
+    try {
+        $items = getBookItems($bookId);
+        $parentId = $input['parent_id'] ?? null;
+
+        // Filter by parent if specified
+        if ($parentId !== null) {
+            $items = array_filter($items, function($item) use ($parentId) {
+                return $item['parent_id'] == $parentId;
+            });
+        }
+
+        // Build hierarchical structure
+        $tree = buildTree($items);
+
+        // Format for AI consumption
+        $formattedItems = formatItemsForAI($tree);
+
+        return [
+            'success' => true,
+            'items' => $formattedItems,
+            'total_count' => count($items),
+            'message' => 'Retrieved ' . count($items) . ' items from the binder'
+        ];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Format items in a readable way for the AI
+ */
+function formatItemsForAI($items, $indent = 0) {
+    $formatted = [];
+    foreach ($items as $item) {
+        $info = [
+            'id' => $item['id'],
+            'title' => $item['title'],
+            'type' => $item['item_type'],
+            'synopsis' => $item['synopsis'],
+            'word_count' => $item['word_count'],
+            'status' => $item['status'],
+            'indent_level' => $indent
+        ];
+
+        if (isset($item['children']) && !empty($item['children'])) {
+            $info['children'] = formatItemsForAI($item['children'], $indent + 1);
+        }
+
+        $formatted[] = $info;
+    }
+    return $formatted;
+}
+
+/**
+ * Read a single binder item from AI request
+ */
+function readBinderItemFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/book_items.php';
+
+    try {
+        $itemId = $input['item_id'] ?? null;
+
+        if (!$itemId) {
+            return ['success' => false, 'error' => 'Item ID is required'];
+        }
+
+        $item = getBookItem($itemId, $bookId);
+
+        if (!$item) {
+            return ['success' => false, 'error' => 'Item not found'];
+        }
+
+        // Get metadata
+        $metadata = getItemMetadata($itemId);
+
+        return [
+            'success' => true,
+            'item' => [
+                'id' => $item['id'],
+                'title' => $item['title'],
+                'type' => $item['item_type'],
+                'synopsis' => $item['synopsis'],
+                'content' => $item['content'],
+                'word_count' => $item['word_count'],
+                'status' => $item['status'],
+                'label' => $item['label'],
+                'parent_id' => $item['parent_id'],
+                'metadata' => $metadata
+            ],
+            'message' => "Retrieved item: {$item['title']}"
+        ];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
     }
 }
 
@@ -285,6 +494,7 @@ function createBinderItemFromAI($input, $bookId) {
         $title = $input['title'] ?? '';
         $itemType = $input['item_type'] ?? 'scene';
         $synopsis = $input['synopsis'] ?? '';
+        $content = $input['content'] ?? '';
         $parentId = $input['parent_id'] ?? null;
 
         if (empty($title)) {
@@ -298,9 +508,11 @@ function createBinderItemFromAI($input, $bookId) {
         }
 
         // Create the item
-        $itemId = createBookItem($bookId, $parentId, $itemType, $title, $synopsis);
+        $result = createBookItem($bookId, $parentId, $itemType, $title, $synopsis, $content);
 
-        if ($itemId) {
+        if ($result['success']) {
+            $itemId = $result['item_id'];
+
             // Track created items globally
             global $createdItems;
             $createdItems[] = [
@@ -318,6 +530,96 @@ function createBinderItemFromAI($input, $bookId) {
             ];
         } else {
             return ['success' => false, 'error' => 'Failed to create item'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Update a binder item from AI request
+ */
+function updateBinderItemFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/book_items.php';
+
+    try {
+        $itemId = $input['item_id'] ?? null;
+
+        if (!$itemId) {
+            return ['success' => false, 'error' => 'Item ID is required'];
+        }
+
+        // Verify item exists
+        $item = getBookItem($itemId, $bookId);
+        if (!$item) {
+            return ['success' => false, 'error' => 'Item not found'];
+        }
+
+        // Build update data
+        $updateData = [];
+        $allowedFields = ['title', 'synopsis', 'content', 'status', 'label'];
+
+        foreach ($allowedFields as $field) {
+            if (isset($input[$field])) {
+                $updateData[$field] = $input[$field];
+            }
+        }
+
+        if (empty($updateData)) {
+            return ['success' => false, 'error' => 'No fields to update'];
+        }
+
+        // Update the item
+        $result = updateBookItem($itemId, $bookId, $updateData);
+
+        if ($result['success']) {
+            $updatedFields = implode(', ', array_keys($updateData));
+            return [
+                'success' => true,
+                'item_id' => $itemId,
+                'updated_fields' => array_keys($updateData),
+                'message' => "Updated item '{$item['title']}': $updatedFields"
+            ];
+        } else {
+            return ['success' => false, 'error' => $result['message'] ?? 'Failed to update item'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Delete a binder item from AI request
+ */
+function deleteBinderItemFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/book_items.php';
+
+    try {
+        $itemId = $input['item_id'] ?? null;
+
+        if (!$itemId) {
+            return ['success' => false, 'error' => 'Item ID is required'];
+        }
+
+        // Get item details before deletion
+        $item = getBookItem($itemId, $bookId);
+        if (!$item) {
+            return ['success' => false, 'error' => 'Item not found'];
+        }
+
+        $itemTitle = $item['title'];
+
+        // Delete the item
+        $result = deleteBookItem($itemId, $bookId);
+
+        if ($result['success']) {
+            return [
+                'success' => true,
+                'item_id' => $itemId,
+                'message' => "Deleted item: $itemTitle"
+            ];
+        } else {
+            return ['success' => false, 'error' => $result['message'] ?? 'Failed to delete item'];
         }
     } catch (Exception $e) {
         return ['success' => false, 'error' => $e->getMessage()];
