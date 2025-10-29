@@ -334,12 +334,22 @@ async function sendAIMessage() {
         if (result.success) {
             addAIMessage(result.response);
         } else {
-            addAIMessage('Sorry, I encountered an error. Please try again.');
+            let errorMessage = 'Sorry, I encountered an error. Please try again.';
+            if (result.message) {
+                errorMessage = result.message;
+            }
+            if (result.debug) {
+                console.log('AI Error Debug Info:', result.debug);
+                errorMessage += '\n\nDebug Info:\n';
+                errorMessage += `- API Configured: ${result.debug.api_configured}\n`;
+                errorMessage += `- cURL Available: ${result.debug.curl_available}\n`;
+            }
+            addAIMessage(errorMessage);
         }
     } catch (error) {
         console.error('AI chat failed:', error);
         typingIndicator.remove();
-        addAIMessage('Sorry, I encountered an error. Please try again.');
+        addAIMessage('Sorry, I encountered an error. Please try again.\n\nError: ' + error.message);
     }
 }
 
@@ -359,9 +369,11 @@ function addAIMessage(message) {
     const messagesContainer = document.getElementById('aiChatMessages');
     const messageDiv = document.createElement('div');
     messageDiv.className = 'ai-message';
+    // Preserve line breaks by converting \n to <br>
+    const formattedMessage = escapeHtml(message).replace(/\n/g, '<br>');
     messageDiv.innerHTML = `
         <div class="ai-avatar">🤖</div>
-        <div class="message-content">${escapeHtml(message)}</div>
+        <div class="message-content">${formattedMessage}</div>
     `;
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;

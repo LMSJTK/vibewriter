@@ -56,9 +56,18 @@ try {
         'response' => $response
     ]);
 } catch (Exception $e) {
+    // Log detailed error for debugging
+    error_log("AI Chat Error: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
+
     jsonResponse([
         'success' => false,
-        'message' => 'AI request failed: ' . $e->getMessage()
+        'message' => 'AI request failed: ' . $e->getMessage(),
+        'debug' => [
+            'error' => $e->getMessage(),
+            'api_configured' => !empty(AI_API_KEY),
+            'curl_available' => function_exists('curl_init')
+        ]
     ], 500);
 }
 
@@ -124,21 +133,31 @@ function callClaudeAPI($message, $context) {
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    if (curl_errno($ch)) {
-        throw new Exception(curl_error($ch));
-    }
+    $curlError = curl_error($ch);
+    $curlErrno = curl_errno($ch);
 
     curl_close($ch);
 
+    if ($curlErrno) {
+        throw new Exception("cURL error ($curlErrno): $curlError");
+    }
+
     if ($httpCode !== 200) {
-        throw new Exception("API returned status code: $httpCode");
+        $errorDetails = "API returned status code: $httpCode";
+        // Try to parse error response
+        $errorData = json_decode($response, true);
+        if ($errorData && isset($errorData['error'])) {
+            $errorDetails .= " - " . json_encode($errorData['error']);
+        } else {
+            $errorDetails .= " - Response: " . substr($response, 0, 500);
+        }
+        throw new Exception($errorDetails);
     }
 
     $result = json_decode($response, true);
 
     if (!isset($result['content'][0]['text'])) {
-        throw new Exception("Invalid API response format");
+        throw new Exception("Invalid API response format. Response: " . substr($response, 0, 500));
     }
 
     return $result['content'][0]['text'];
