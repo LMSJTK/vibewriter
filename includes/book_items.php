@@ -99,6 +99,12 @@ function updateBookItem($itemId, $bookId, $data) {
         $stmt = $pdo->prepare($sql);
         $stmt->execute($values);
 
+        // Check if any rows were actually updated
+        $rowCount = $stmt->rowCount();
+        if ($rowCount === 0) {
+            return ['success' => false, 'message' => 'Item not found or no changes made'];
+        }
+
         // Update book's total word count
         updateBookWordCount($bookId);
 
