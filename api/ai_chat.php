@@ -126,11 +126,15 @@ function buildAIContext($book, $itemId) {
 
     $context .= "When working with the binder:\n";
     $context .= "- Read existing items first to understand what's already there\n";
-    $context .= "- Tell the user what actions you're taking (creating, updating, deleting)\n";
+    $context .= "- Use tools IMMEDIATELY to perform actions - don't just describe what you'll do\n";
+    $context .= "- If a user asks you to create, update, or delete something, use the tool right away\n";
+    $context .= "- After using a tool, tell the user what you did based on the tool result\n";
     $context .= "- Be specific about which items you're working with (use titles and IDs)\n";
     $context .= "- Organize content logically using folders and proper nesting\n\n";
 
-    $context .= "Provide helpful, creative assistance for writing this book. Be encouraging and specific in your suggestions.";
+    $context .= "IMPORTANT: When the user asks you to perform an action (create, update, delete, read), use the corresponding tool immediately in your response. Do not just say you will do it - actually do it by calling the tool.";
+
+    $context .= "\n\nProvide helpful, creative assistance for writing this book. Be encouraging and specific in your suggestions.";
 
     return $context;
 }
@@ -267,6 +271,10 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
     // Make initial API call
     $result = makeClaudeAPIRequest($payload);
 
+    // Log the stop reason for debugging
+    error_log("Claude API stop_reason: " . ($result['stop_reason'] ?? 'unknown'));
+    error_log("Claude API content types: " . json_encode(array_map(function($c) { return $c['type']; }, $result['content'])));
+
     // Handle tool use
     if (isset($result['stop_reason']) && $result['stop_reason'] === 'tool_use') {
         $toolResults = [];
@@ -400,6 +408,9 @@ function makeClaudeAPIRequest($payload) {
 function handleToolUse($toolUse, $bookId, $itemId) {
     $toolName = $toolUse['name'];
     $input = $toolUse['input'];
+
+    // Log tool execution
+    error_log("AI Tool Called: $toolName with input: " . json_encode($input));
 
     switch ($toolName) {
         case 'read_binder_items':
@@ -611,6 +622,9 @@ function updateBinderItemFromAI($input, $bookId) {
 
         // Update the item
         $result = updateBookItem($itemId, $bookId, $updateData);
+
+        // Log the result
+        error_log("Update item result: " . json_encode($result));
 
         if ($result['success']) {
             $updatedFields = implode(', ', array_keys($updateData));
