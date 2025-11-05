@@ -4,8 +4,33 @@
  * This tests the read, update, and delete functionality
  */
 
+// Start output buffering to prevent header issues
+ob_start();
+
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/includes/book_items.php';
+require_once __DIR__ . '/includes/auth.php';
+
+// Set up a test session (simulating logged-in user)
+// Note: This assumes user ID 1 exists in your database
+if (!isset($_SESSION['user_id'])) {
+    $_SESSION['user_id'] = 1; // Set to a valid user ID from your database
+    $_SESSION['username'] = 'test_user';
+    $_SESSION['email'] = 'test@example.com';
+}
+
+// Now include the AI chat functions
+// We need to prevent the header/auth check from running
+// So we'll define a flag to bypass it
+define('CLI_TEST_MODE', true);
+
+// Include the file but suppress the header output
+ob_start();
+require_once __DIR__ . '/api/ai_chat.php';
+ob_end_clean(); // Discard the header output
+
+// Resume normal output
+ob_end_flush();
 
 echo "=== Testing AI Binder Tools ===\n\n";
 
@@ -13,11 +38,14 @@ echo "=== Testing AI Binder Tools ===\n\n";
 $bookId = 1; // Assuming book ID 1 exists
 
 echo "1. Testing readBinderItemsFromAI...\n";
-require_once __DIR__ . '/api/ai_chat.php';
-
 $readAllResult = readBinderItemsFromAI($bookId, []);
 echo "   Result: " . ($readAllResult['success'] ? 'SUCCESS' : 'FAILED') . "\n";
-echo "   Message: " . $readAllResult['message'] . "\n";
+if (isset($readAllResult['message'])) {
+    echo "   Message: " . $readAllResult['message'] . "\n";
+}
+if (isset($readAllResult['error'])) {
+    echo "   Error: " . $readAllResult['error'] . "\n";
+}
 if (isset($readAllResult['items']) && !empty($readAllResult['items'])) {
     echo "   First item: " . $readAllResult['items'][0]['title'] . " (ID: " . $readAllResult['items'][0]['id'] . ")\n";
     $testItemId = $readAllResult['items'][0]['id'];
@@ -34,7 +62,11 @@ if (isset($readAllResult['items']) && !empty($readAllResult['items'])) {
         $testItemId = $createResult['item_id'];
         echo "   Created test item with ID: $testItemId\n";
     } else {
-        die("   FAILED to create test item\n");
+        echo "   FAILED to create test item\n";
+        if (isset($createResult['error'])) {
+            echo "   Error: " . $createResult['error'] . "\n";
+        }
+        die();
     }
 }
 

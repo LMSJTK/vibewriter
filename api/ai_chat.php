@@ -7,14 +7,17 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/books.php';
 
-header('Content-Type: application/json');
+// Skip web-specific checks when running in CLI test mode
+if (!defined('CLI_TEST_MODE') || !CLI_TEST_MODE) {
+    header('Content-Type: application/json');
 
-if (!isLoggedIn()) {
-    jsonResponse(['success' => false, 'message' => 'Not authenticated'], 401);
-}
+    if (!isLoggedIn()) {
+        jsonResponse(['success' => false, 'message' => 'Not authenticated'], 401);
+    }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    jsonResponse(['success' => false, 'message' => 'Invalid request method'], 405);
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        jsonResponse(['success' => false, 'message' => 'Invalid request method'], 405);
+    }
 }
 
 $data = json_decode(file_get_contents('php://input'), true);
