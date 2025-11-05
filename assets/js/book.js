@@ -334,9 +334,15 @@ async function sendAIMessage() {
         if (result.success) {
             addAIMessage(result.response);
 
-            // Show notification if items were created
-            if (result.items_created && result.items_created.length > 0) {
-                showBinderUpdateNotification(result.items_created);
+            // Show notification if items were created or updated
+            const hasCreated = result.items_created && result.items_created.length > 0;
+            const hasUpdated = result.items_updated && result.items_updated.length > 0;
+
+            if (hasCreated || hasUpdated) {
+                showBinderUpdateNotification(
+                    result.items_created || [],
+                    result.items_updated || []
+                );
             }
         } else {
             let errorMessage = 'Sorry, I encountered an error. Please try again.';
@@ -410,12 +416,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Show notification when AI creates binder items
-function showBinderUpdateNotification(items) {
+// Show notification when AI creates or updates binder items
+function showBinderUpdateNotification(createdItems, updatedItems) {
     // Remove existing notification if any
     const existing = document.getElementById('binderUpdateNotification');
     if (existing) {
         existing.remove();
+    }
+
+    // Build message based on what changed
+    let messages = [];
+    if (createdItems.length > 0) {
+        const itemsList = createdItems.map(item => `${item.type}: "${item.title}"`).join(', ');
+        messages.push(`<strong>Created:</strong> ${itemsList}`);
+    }
+    if (updatedItems.length > 0) {
+        const itemsList = updatedItems.map(item => {
+            const fields = item.updated_fields.join(', ');
+            return `"${item.title}" (${fields})`;
+        }).join(', ');
+        messages.push(`<strong>Updated:</strong> ${itemsList}`);
     }
 
     // Create notification banner
@@ -431,15 +451,14 @@ function showBinderUpdateNotification(items) {
         border-radius: 8px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         z-index: 10000;
-        max-width: 350px;
+        max-width: 400px;
         animation: slideIn 0.3s ease-out;
     `;
 
-    const itemsList = items.map(item => `${item.type}: "${item.title}"`).join(', ');
     notification.innerHTML = `
         <div style="margin-bottom: 10px;">
             <strong>✓ Binder Updated</strong><br>
-            <small>Created: ${itemsList}</small>
+            <small>${messages.join('<br>')}</small>
         </div>
         <button onclick="location.reload()" style="
             background: white;
