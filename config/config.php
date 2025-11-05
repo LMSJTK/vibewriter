@@ -91,8 +91,11 @@ function verifyCSRFToken($token) {
 
 // JSON response helper
 function jsonResponse($data, $statusCode = 200) {
-    http_response_code($statusCode);
-    header('Content-Type: application/json');
+    // Skip headers in CLI test mode
+    if (!defined('CLI_TEST_MODE') || !CLI_TEST_MODE) {
+        http_response_code($statusCode);
+        header('Content-Type: application/json');
+    }
     echo json_encode($data);
     exit;
 }
