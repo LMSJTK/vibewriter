@@ -18,16 +18,21 @@ if (!defined('CLI_TEST_MODE') || !CLI_TEST_MODE) {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         jsonResponse(['success' => false, 'message' => 'Invalid request method'], 405);
     }
-}
 
-$data = json_decode(file_get_contents('php://input'), true);
+    $data = json_decode(file_get_contents('php://input'), true);
 
-$bookId = $data['book_id'] ?? null;
-$itemId = $data['item_id'] ?? null;
-$message = $data['message'] ?? '';
+    $bookId = $data['book_id'] ?? null;
+    $itemId = $data['item_id'] ?? null;
+    $message = $data['message'] ?? '';
 
-if (!$bookId || !$message) {
-    jsonResponse(['success' => false, 'message' => 'Missing required fields'], 400);
+    if (!$bookId || !$message) {
+        jsonResponse(['success' => false, 'message' => 'Missing required fields'], 400);
+    }
+} else {
+    // In CLI test mode, skip request processing
+    // The test will call the functions directly
+    // Exit early to just load function definitions
+    goto skip_request_processing;
 }
 
 // Verify book belongs to user
@@ -78,6 +83,8 @@ try {
         ]
     ], 500);
 }
+
+skip_request_processing:
 
 /**
  * Build context for AI from book and current item
