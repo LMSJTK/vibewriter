@@ -54,9 +54,10 @@ $context = buildAIContext($book, $itemId);
 
 // Call Claude API
 try {
-    // Track if any items were created
-    global $createdItems;
+    // Track if any items were created or updated
+    global $createdItems, $updatedItems;
     $createdItems = [];
+    $updatedItems = [];
 
     $response = callClaudeAPI($message, $context, $bookId, $itemId);
 
@@ -66,7 +67,8 @@ try {
     jsonResponse([
         'success' => true,
         'response' => $response,
-        'items_created' => !empty($createdItems) ? $createdItems : null
+        'items_created' => !empty($createdItems) ? $createdItems : null,
+        'items_updated' => !empty($updatedItems) ? $updatedItems : null
     ]);
 } catch (Exception $e) {
     // Log detailed error for debugging
@@ -637,6 +639,14 @@ function updateBinderItemFromAI($input, $bookId) {
         error_log("Update item result: " . json_encode($result));
 
         if ($result['success']) {
+            // Track updated items globally
+            global $updatedItems;
+            $updatedItems[] = [
+                'item_id' => $itemId,
+                'title' => $updateData['title'] ?? $item['title'],
+                'updated_fields' => array_keys($updateData)
+            ];
+
             $updatedFields = implode(', ', array_keys($updateData));
             return [
                 'success' => true,
