@@ -380,8 +380,17 @@ function makeClaudeAPIRequest($payload) {
 
     $jsonPayload = encodeForClaudeAPI($payload);
 
-    // Log the payload for debugging (only in development)
-    // Uncomment to debug: error_log("Claude API Payload: " . $jsonPayload);
+    // Log the payload for debugging
+    error_log("=== CLAUDE API REQUEST ===");
+    error_log("Payload size: " . strlen($jsonPayload) . " bytes");
+    error_log("Model: " . ($payload['model'] ?? 'unknown'));
+    error_log("Tools count: " . (isset($payload['tools']) ? count($payload['tools']) : 0));
+    if (isset($payload['messages'])) {
+        error_log("Messages count: " . count($payload['messages']));
+        $lastMessage = end($payload['messages']);
+        error_log("Last message role: " . ($lastMessage['role'] ?? 'unknown'));
+    }
+    // Uncomment to see full payload: error_log("Full payload: " . $jsonPayload);
 
     $ch = curl_init($endpoint);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -421,6 +430,22 @@ function makeClaudeAPIRequest($payload) {
 
     if (!$result) {
         throw new Exception("Invalid JSON response from API");
+    }
+
+    // Log the response details
+    error_log("=== CLAUDE API RESPONSE ===");
+    error_log("Stop reason: " . ($result['stop_reason'] ?? 'unknown'));
+    error_log("Content blocks: " . (isset($result['content']) ? count($result['content']) : 0));
+    if (isset($result['content'])) {
+        foreach ($result['content'] as $idx => $block) {
+            error_log("Block $idx type: " . ($block['type'] ?? 'unknown'));
+            if ($block['type'] === 'text') {
+                error_log("Text preview: " . substr($block['text'] ?? '', 0, 100));
+            } elseif ($block['type'] === 'tool_use') {
+                error_log("Tool: " . ($block['name'] ?? 'unknown'));
+                error_log("Tool input: " . json_encode($block['input'] ?? []));
+            }
+        }
     }
 
     return $result;
