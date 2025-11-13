@@ -54,10 +54,12 @@ $context = buildAIContext($book, $itemId);
 
 // Call Claude API
 try {
-    // Track if any items were created or updated
-    global $createdItems, $updatedItems;
+    // Track if any items or characters were created or updated
+    global $createdItems, $updatedItems, $createdCharacters, $updatedCharacters;
     $createdItems = [];
     $updatedItems = [];
+    $createdCharacters = [];
+    $updatedCharacters = [];
 
     $response = callClaudeAPI($message, $context, $bookId, $itemId);
 
@@ -68,7 +70,9 @@ try {
         'success' => true,
         'response' => $response,
         'items_created' => !empty($createdItems) ? $createdItems : null,
-        'items_updated' => !empty($updatedItems) ? $updatedItems : null
+        'items_updated' => !empty($updatedItems) ? $updatedItems : null,
+        'characters_created' => !empty($createdCharacters) ? $createdCharacters : null,
+        'characters_updated' => !empty($updatedCharacters) ? $updatedCharacters : null
     ]);
 } catch (Exception $e) {
     // Log detailed error for debugging
@@ -267,6 +271,156 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
                     ]
                 ],
                 'required' => ['item_id']
+            ]
+        ],
+        [
+            'name' => 'read_characters',
+            'description' => 'Reads all characters in the book. Use this to see what characters have been created and their basic information.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => []
+            ]
+        ],
+        [
+            'name' => 'read_character',
+            'description' => 'Reads detailed information about a specific character including personality, appearance, background, relationships, and dialogue patterns.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'character_id' => [
+                        'type' => 'number',
+                        'description' => 'The ID of the character to read'
+                    ]
+                ],
+                'required' => ['character_id']
+            ]
+        ],
+        [
+            'name' => 'create_character',
+            'description' => 'Creates a new character when they are first mentioned or discussed. Use this to add characters to the book\'s character database as they come up in conversation.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'name' => [
+                        'type' => 'string',
+                        'description' => 'The character\'s name'
+                    ],
+                    'role' => [
+                        'type' => 'string',
+                        'enum' => ['protagonist', 'antagonist', 'supporting', 'minor'],
+                        'description' => 'The character\'s role in the story'
+                    ],
+                    'physical_description' => [
+                        'type' => 'string',
+                        'description' => 'Physical appearance, clothing style, distinctive features'
+                    ],
+                    'personality' => [
+                        'type' => 'string',
+                        'description' => 'Personality traits, temperament, quirks'
+                    ],
+                    'speech_patterns' => [
+                        'type' => 'string',
+                        'description' => 'How they speak: dialect, common phrases, tone'
+                    ],
+                    'background' => [
+                        'type' => 'string',
+                        'description' => 'Backstory, history, formative experiences'
+                    ],
+                    'motivation' => [
+                        'type' => 'string',
+                        'description' => 'Goals, desires, what drives them'
+                    ],
+                    'age' => [
+                        'type' => 'number',
+                        'description' => 'Age in years (optional)'
+                    ],
+                    'gender' => [
+                        'type' => 'string',
+                        'description' => 'Gender identity (optional)'
+                    ]
+                ],
+                'required' => ['name']
+            ]
+        ],
+        [
+            'name' => 'update_character',
+            'description' => 'Updates character information as new details are discussed or revealed. Use this to add or modify character details, personality, appearance, background, relationships, etc.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'character_id' => [
+                        'type' => 'number',
+                        'description' => 'The ID of the character to update'
+                    ],
+                    'name' => [
+                        'type' => 'string',
+                        'description' => 'Updated name (optional)'
+                    ],
+                    'role' => [
+                        'type' => 'string',
+                        'enum' => ['protagonist', 'antagonist', 'supporting', 'minor'],
+                        'description' => 'Updated role (optional)'
+                    ],
+                    'physical_description' => [
+                        'type' => 'string',
+                        'description' => 'Updated physical appearance (optional)'
+                    ],
+                    'personality' => [
+                        'type' => 'string',
+                        'description' => 'Updated personality traits (optional)'
+                    ],
+                    'speech_patterns' => [
+                        'type' => 'string',
+                        'description' => 'Updated speech patterns (optional)'
+                    ],
+                    'voice_description' => [
+                        'type' => 'string',
+                        'description' => 'Description of how they speak for dialogue generation (optional)'
+                    ],
+                    'background' => [
+                        'type' => 'string',
+                        'description' => 'Updated background (optional)'
+                    ],
+                    'motivation' => [
+                        'type' => 'string',
+                        'description' => 'Updated motivation (optional)'
+                    ],
+                    'arc' => [
+                        'type' => 'string',
+                        'description' => 'Character arc and development (optional)'
+                    ],
+                    'relationships' => [
+                        'type' => 'string',
+                        'description' => 'Relationships with other characters (optional)'
+                    ],
+                    'notes' => [
+                        'type' => 'string',
+                        'description' => 'Additional notes (optional)'
+                    ],
+                    'age' => [
+                        'type' => 'number',
+                        'description' => 'Updated age (optional)'
+                    ],
+                    'gender' => [
+                        'type' => 'string',
+                        'description' => 'Updated gender (optional)'
+                    ]
+                ],
+                'required' => ['character_id']
+            ]
+        ],
+        [
+            'name' => 'delete_character',
+            'description' => 'Deletes a character from the book. Use this carefully when the user wants to remove a character.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'character_id' => [
+                        'type' => 'number',
+                        'description' => 'The ID of the character to delete'
+                    ]
+                ],
+                'required' => ['character_id']
             ]
         ]
     ];
@@ -476,6 +630,21 @@ function handleToolUse($toolUse, $bookId, $itemId) {
 
         case 'delete_binder_item':
             return deleteBinderItemFromAI($input, $bookId);
+
+        case 'read_characters':
+            return readCharactersFromAI($bookId, $input);
+
+        case 'read_character':
+            return readCharacterFromAI($input, $bookId);
+
+        case 'create_character':
+            return createCharacterFromAI($input, $bookId);
+
+        case 'update_character':
+            return updateCharacterFromAI($input, $bookId);
+
+        case 'delete_character':
+            return deleteCharacterFromAI($input, $bookId);
 
         default:
             return ['success' => false, 'error' => 'Unknown tool: ' . $toolName];
@@ -747,5 +916,250 @@ function saveAIConversation($bookId, $userId, $message, $response) {
         VALUES (?, ?, ?, ?)
     ");
     $stmt->execute([$bookId, $userId, $message, $response]);
+}
+
+/**
+ * Read all characters from AI request
+ */
+function readCharactersFromAI($bookId, $input) {
+    require_once __DIR__ . '/../includes/characters.php';
+
+    try {
+        $characters = getCharacters($bookId);
+
+        // Format for AI consumption
+        $formattedCharacters = array_map(function($char) {
+            return [
+                'id' => $char['id'],
+                'name' => $char['name'],
+                'role' => $char['role'],
+                'age' => $char['age'],
+                'gender' => $char['gender'],
+                'physical_description' => $char['physical_description'],
+                'personality' => $char['personality'],
+                'has_image' => !empty($char['primary_image'])
+            ];
+        }, $characters);
+
+        return [
+            'success' => true,
+            'characters' => $formattedCharacters,
+            'total_count' => count($characters),
+            'message' => 'Retrieved ' . count($characters) . ' characters'
+        ];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Read a single character from AI request
+ */
+function readCharacterFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/characters.php';
+
+    try {
+        $characterId = $input['character_id'] ?? null;
+
+        if (!$characterId) {
+            return ['success' => false, 'error' => 'Character ID is required'];
+        }
+
+        $character = getCharacter($characterId, $bookId);
+
+        if (!$character) {
+            return ['success' => false, 'error' => 'Character not found'];
+        }
+
+        return [
+            'success' => true,
+            'character' => [
+                'id' => $character['id'],
+                'name' => $character['name'],
+                'role' => $character['role'],
+                'age' => $character['age'],
+                'gender' => $character['gender'],
+                'physical_description' => $character['physical_description'],
+                'personality' => $character['personality'],
+                'speech_patterns' => $character['speech_patterns'],
+                'voice_description' => $character['voice_description'],
+                'background' => $character['background'],
+                'motivation' => $character['motivation'],
+                'arc' => $character['arc'],
+                'relationships' => $character['relationships'],
+                'notes' => $character['notes']
+            ],
+            'message' => "Retrieved character: {$character['name']}"
+        ];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Create a character from AI request
+ */
+function createCharacterFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/characters.php';
+
+    try {
+        $name = $input['name'] ?? '';
+
+        if (empty($name)) {
+            return ['success' => false, 'error' => 'Character name is required'];
+        }
+
+        // Build character data
+        $characterData = [
+            'name' => $name,
+            'role' => $input['role'] ?? 'supporting',
+            'physical_description' => $input['physical_description'] ?? '',
+            'personality' => $input['personality'] ?? '',
+            'speech_patterns' => $input['speech_patterns'] ?? '',
+            'background' => $input['background'] ?? '',
+            'motivation' => $input['motivation'] ?? '',
+            'age' => $input['age'] ?? null,
+            'gender' => $input['gender'] ?? '',
+            'ai_generated' => true,
+            'ai_metadata' => [
+                'created_by_ai' => true,
+                'created_at' => date('Y-m-d H:i:s')
+            ]
+        ];
+
+        // Create the character
+        $result = createCharacter($bookId, $characterData);
+
+        if ($result['success']) {
+            $characterId = $result['character_id'];
+
+            // Track created characters globally
+            global $createdCharacters;
+            if (!isset($createdCharacters)) {
+                $createdCharacters = [];
+            }
+            $createdCharacters[] = [
+                'character_id' => $characterId,
+                'name' => $name,
+                'role' => $characterData['role']
+            ];
+
+            return [
+                'success' => true,
+                'character_id' => $characterId,
+                'name' => $name,
+                'message' => "Created character: $name ({$characterData['role']})"
+            ];
+        } else {
+            return ['success' => false, 'error' => 'Failed to create character'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Update a character from AI request
+ */
+function updateCharacterFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/characters.php';
+
+    try {
+        $characterId = $input['character_id'] ?? null;
+
+        if (!$characterId) {
+            return ['success' => false, 'error' => 'Character ID is required'];
+        }
+
+        // Verify character exists
+        $character = getCharacter($characterId, $bookId);
+        if (!$character) {
+            return ['success' => false, 'error' => 'Character not found'];
+        }
+
+        // Build update data
+        $updateData = [];
+        $allowedFields = [
+            'name', 'role', 'age', 'gender', 'physical_description',
+            'personality', 'speech_patterns', 'voice_description',
+            'background', 'motivation', 'arc', 'relationships', 'notes'
+        ];
+
+        foreach ($allowedFields as $field) {
+            if (isset($input[$field])) {
+                $updateData[$field] = $input[$field];
+            }
+        }
+
+        if (empty($updateData)) {
+            return ['success' => false, 'error' => 'No fields to update'];
+        }
+
+        // Update the character
+        $result = updateCharacter($characterId, $bookId, $updateData);
+
+        if ($result['success']) {
+            // Track updated characters globally
+            global $updatedCharacters;
+            if (!isset($updatedCharacters)) {
+                $updatedCharacters = [];
+            }
+            $updatedCharacters[] = [
+                'character_id' => $characterId,
+                'name' => $updateData['name'] ?? $character['name'],
+                'updated_fields' => array_keys($updateData)
+            ];
+
+            $updatedFields = implode(', ', array_keys($updateData));
+            return [
+                'success' => true,
+                'character_id' => $characterId,
+                'updated_fields' => array_keys($updateData),
+                'message' => "Updated character '{$character['name']}': $updatedFields"
+            ];
+        } else {
+            return ['success' => false, 'error' => $result['message'] ?? 'Failed to update character'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Delete a character from AI request
+ */
+function deleteCharacterFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/characters.php';
+
+    try {
+        $characterId = $input['character_id'] ?? null;
+
+        if (!$characterId) {
+            return ['success' => false, 'error' => 'Character ID is required'];
+        }
+
+        // Get character details before deletion
+        $character = getCharacter($characterId, $bookId);
+        if (!$character) {
+            return ['success' => false, 'error' => 'Character not found'];
+        }
+
+        $characterName = $character['name'];
+
+        // Delete the character
+        $result = deleteCharacter($characterId, $bookId);
+
+        if ($result['success']) {
+            return [
+                'success' => true,
+                'character_id' => $characterId,
+                'message' => "Deleted character: $characterName"
+            ];
+        } else {
+            return ['success' => false, 'error' => $result['message'] ?? 'Failed to delete character'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
 }
 ?>
