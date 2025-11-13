@@ -307,7 +307,7 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
             'description' => 'Reads all characters in the book. Use this to see what characters have been created and their basic information.',
             'input_schema' => [
                 'type' => 'object',
-                'properties' => []
+                'properties' => new stdClass()
             ]
         ],
         [
