@@ -115,38 +115,41 @@ function buildAIContext($book, $itemId) {
         }
     }
 
-    $context .= "\nYou have full access to manage the book's binder structure. You can:\n\n";
+    $context .= "\n=== CRITICAL TOOL USAGE RULES ===\n";
+    $context .= "When the user asks you to create, read, update, or delete binder items, you MUST use the corresponding tool in your response.\n";
+    $context .= "DO NOT just describe what you will do - actually invoke the tool.\n";
+    $context .= "NEVER say 'I will update...' or 'Now I'll create...' - just USE THE TOOL immediately.\n\n";
 
-    $context .= "READ binder items:\n";
-    $context .= "- Use 'read_binder_items' to see all existing chapters, scenes, and sections\n";
-    $context .= "- Use 'read_binder_item' to examine the detailed content of a specific item\n";
-    $context .= "- Check existing content before making suggestions or creating new items\n\n";
+    $context .= "Available Tools:\n\n";
 
-    $context .= "CREATE new items:\n";
-    $context .= "- Use 'create_binder_item' to add chapters, scenes, notes, research, or folders\n";
-    $context .= "- Item types: 'chapter', 'scene', 'folder', 'note', 'research'\n";
-    $context .= "- You can add initial content, synopsis, and nest items under parents\n\n";
+    $context .= "1. read_binder_items - See all chapters, scenes, and sections in the binder\n";
+    $context .= "   Use this first to understand what already exists\n\n";
 
-    $context .= "UPDATE existing items:\n";
-    $context .= "- Use 'update_binder_item' to modify titles, content, synopsis, status, or labels\n";
-    $context .= "- Update content to add or revise writing\n";
-    $context .= "- Change status to track progress (e.g., 'draft', 'in_progress', 'complete')\n\n";
+    $context .= "2. read_binder_item - Get full details of a specific item by ID\n";
+    $context .= "   Required: item_id (number)\n\n";
 
-    $context .= "DELETE items:\n";
-    $context .= "- Use 'delete_binder_item' to remove items (this will also delete all children)\n";
-    $context .= "- Always confirm with the user before deleting important content\n\n";
+    $context .= "3. create_binder_item - Add a new chapter, scene, note, research, or folder\n";
+    $context .= "   Required: title (string), item_type (string: 'chapter', 'scene', 'folder', 'note', 'research')\n";
+    $context .= "   Optional: synopsis, content, parent_id\n\n";
 
-    $context .= "When working with the binder:\n";
-    $context .= "- Read existing items first to understand what's already there\n";
-    $context .= "- Use tools IMMEDIATELY to perform actions - don't just describe what you'll do\n";
-    $context .= "- If a user asks you to create, update, or delete something, use the tool right away\n";
-    $context .= "- After using a tool, tell the user what you did based on the tool result\n";
-    $context .= "- Be specific about which items you're working with (use titles and IDs)\n";
-    $context .= "- Organize content logically using folders and proper nesting\n\n";
+    $context .= "4. update_binder_item - Modify an existing item's title, content, synopsis, status, or label\n";
+    $context .= "   Required: item_id (number)\n";
+    $context .= "   Optional: title, synopsis, content, status, label\n";
+    $context .= "   Example: To change title, call update_binder_item with {item_id: 6, title: 'New Title'}\n\n";
 
-    $context .= "IMPORTANT: When the user asks you to perform an action (create, update, delete, read), use the corresponding tool immediately in your response. Do not just say you will do it - actually do it by calling the tool.";
+    $context .= "5. delete_binder_item - Remove an item and all its children\n";
+    $context .= "   Required: item_id (number)\n\n";
 
-    $context .= "\n\nProvide helpful, creative assistance for writing this book. Be encouraging and specific in your suggestions.";
+    $context .= "=== ACTION WORKFLOW ===\n";
+    $context .= "1. If user says 'update the title of X to Y' → Immediately call update_binder_item tool\n";
+    $context .= "2. If user says 'create a chapter called X' → Immediately call create_binder_item tool\n";
+    $context .= "3. If user says 'delete X' → Immediately call delete_binder_item tool\n";
+    $context .= "4. After the tool executes, respond based on the result the tool returns\n\n";
+
+    $context .= "WRONG RESPONSE: 'I found chapter \"Test\" with ID 6. Now I'll update its title to \"New Title\"'\n";
+    $context .= "RIGHT RESPONSE: [Use update_binder_item tool immediately, then say] 'I've updated the chapter title to \"New Title\"'\n\n";
+
+    $context .= "Provide helpful, creative assistance for writing this book. Be encouraging and specific in your suggestions.";
 
     return $context;
 }
@@ -283,12 +286,18 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
     // Make initial API call
     $result = makeClaudeAPIRequest($payload);
 
-    // Log the stop reason for debugging
-    error_log("Claude API stop_reason: " . ($result['stop_reason'] ?? 'unknown'));
-    error_log("Claude API content types: " . json_encode(array_map(function($c) { return $c['type']; }, $result['content'])));
+    // Handle multiple rounds of tool use (agentic loop)
+    // This allows the AI to call tools sequentially (e.g., search for item, then update it)
+    $maxToolRounds = 5; // Prevent infinite loops
+    $toolRound = 0;
 
-    // Handle tool use
-    if (isset($result['stop_reason']) && $result['stop_reason'] === 'tool_use') {
+    while (isset($result['stop_reason']) && $result['stop_reason'] === 'tool_use' && $toolRound < $maxToolRounds) {
+        $toolRound++;
+
+        // Log the stop reason for debugging
+        error_log("Claude API stop_reason: " . $result['stop_reason'] . " (round $toolRound)");
+        error_log("Claude API content types: " . json_encode(array_map(function($c) { return $c['type']; }, $result['content'])));
+
         $toolResults = [];
 
         foreach ($result['content'] as $content) {
@@ -335,9 +344,12 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
             'content' => $toolResults
         ];
 
-        // Get final response after tool use
+        // Get next response (might use more tools or return final answer)
         $result = makeClaudeAPIRequest($payload);
     }
+
+    // Log final stop reason
+    error_log("Claude API final stop_reason: " . ($result['stop_reason'] ?? 'unknown') . " after $toolRound tool rounds");
 
     // Extract text response
     foreach ($result['content'] as $content) {
