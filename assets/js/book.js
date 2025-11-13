@@ -335,13 +335,24 @@ async function sendAIMessage() {
             addAIMessage(result.response);
 
             // Show notification if items were created or updated
-            const hasCreated = result.items_created && result.items_created.length > 0;
-            const hasUpdated = result.items_updated && result.items_updated.length > 0;
+            const hasItemsCreated = result.items_created && result.items_created.length > 0;
+            const hasItemsUpdated = result.items_updated && result.items_updated.length > 0;
 
-            if (hasCreated || hasUpdated) {
+            if (hasItemsCreated || hasItemsUpdated) {
                 showBinderUpdateNotification(
                     result.items_created || [],
                     result.items_updated || []
+                );
+            }
+
+            // Show notification if characters were created or updated
+            const hasCharsCreated = result.characters_created && result.characters_created.length > 0;
+            const hasCharsUpdated = result.characters_updated && result.characters_updated.length > 0;
+
+            if (hasCharsCreated || hasCharsUpdated) {
+                showCharacterUpdateNotification(
+                    result.characters_created || [],
+                    result.characters_updated || []
                 );
             }
         } else {
@@ -514,9 +525,84 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Show character update notification
+function showCharacterUpdateNotification(createdCharacters, updatedCharacters) {
+    // Remove existing notification if any
+    const existing = document.getElementById('characterUpdateNotification');
+    if (existing) {
+        existing.remove();
+    }
+
+    // Build message based on what changed
+    let messages = [];
+    if (createdCharacters.length > 0) {
+        const charList = createdCharacters.map(char => `${char.name} (${char.role})`).join(', ');
+        messages.push(`<strong>Created:</strong> ${charList}`);
+    }
+    if (updatedCharacters.length > 0) {
+        const charList = updatedCharacters.map(char => {
+            const fields = char.updated_fields.join(', ');
+            return `${char.name} (${fields})`;
+        }).join(', ');
+        messages.push(`<strong>Updated:</strong> ${charList}`);
+    }
+
+    // Create notification banner
+    const notification = document.createElement('div');
+    notification.id = 'characterUpdateNotification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 120px;
+        right: 20px;
+        background: #10b981;
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        max-width: 400px;
+        animation: slideIn 0.3s ease-out;
+    `;
+
+    notification.innerHTML = `
+        <div style="margin-bottom: 10px;">
+            <strong>👥 Characters Updated</strong><br>
+            <small>${messages.join('<br>')}</small>
+        </div>
+        <button onclick="window.location.href='characters.php?id=${bookId}'" style="
+            background: white;
+            color: #10b981;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-right: 10px;
+        ">View Characters</button>
+        <button onclick="this.parentElement.remove()" style="
+            background: transparent;
+            color: white;
+            border: 1px solid white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        ">Dismiss</button>
+    `;
+
+    document.body.appendChild(notification);
+
+    // Auto-dismiss after 15 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.style.animation = 'slideIn 0.3s ease-out reverse';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 15000);
+}
+
 // Placeholder functions for features to be implemented
 function showCharactersPanel() {
-    alert('Characters panel coming soon!');
+    window.location.href = 'characters.php?id=' + bookId;
 }
 
 function showItemMetadata(itemId) {
