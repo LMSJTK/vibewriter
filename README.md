@@ -10,7 +10,7 @@ VibeWriter is a comprehensive web-based application designed for authors who wan
 
 - **Hierarchical Project Structure (Binder)** - Organize your book with folders, chapters, scenes, and notes in a flexible tree structure
 - **Auto-Saving Editor** - Write without worry with automatic content saving
-- **AI Chat Assistant** - Get help with plot development, character creation, scene writing, and more using Claude AI
+- **AI Chat Assistant** - Get help with plot development, character creation, scene writing, and more using Claude or GPT models
 - **Multiple Book Projects** - Manage multiple books simultaneously
 - **User Authentication** - Secure login and registration system
 - **Word Count Tracking** - Monitor your progress with real-time word counts
@@ -36,7 +36,7 @@ VibeWriter is a comprehensive web-based application designed for authors who wan
 - **Backend**: PHP 7.4+ with PDO (no frameworks - pure vanilla PHP)
 - **Database**: MySQL/MariaDB
 - **Frontend**: HTML5, CSS3, Vanilla JavaScript
-- **AI Integration**: Claude API (Anthropic)
+- **AI Integration**: Anthropic Claude or OpenAI GPT chat models
 - **Architecture**: RESTful API design with JSON responses
 
 ## Installation
@@ -66,7 +66,7 @@ VibeWriter is a comprehensive web-based application designed for authors who wan
    - The installer will create the database and tables automatically
 
 4. **Configure AI (Optional but Recommended)**
-   - Get a Claude API key from https://console.anthropic.com/
+  - Get an Anthropic Claude API key from https://console.anthropic.com/ or use an OpenAI API key with GPT-4.1/GPT-5.1 models
    - Edit `config/config.php` and add your API key:
      ```php
      define('AI_API_KEY', 'your-api-key-here');
@@ -225,9 +225,15 @@ define('DB_PASS', 'your_password');
 ### AI Configuration
 Edit `config/config.php`:
 ```php
-// Claude API (Anthropic)
-define('AI_API_KEY', 'your-claude-api-key');
-define('AI_MODEL', 'claude-3-5-sonnet-20241022');
+// AI provider configuration
+define('AI_PROVIDER', 'anthropic'); // 'anthropic' or 'openai'
+define('AI_API_KEY', 'your-ai-api-key');
+if (AI_PROVIDER === 'openai') {
+    define('AI_API_ENDPOINT', 'https://api.openai.com/v1/chat/completions');
+} else {
+    define('AI_API_ENDPOINT', 'https://api.anthropic.com/v1/messages');
+}
+define('AI_MODEL', 'claude-3-5-sonnet-20241022'); // e.g., 'gpt-5.1-chat-latest' when using OpenAI
 
 // Optional: Image generation
 define('IMAGE_API_KEY', 'your-image-api-key');

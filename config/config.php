@@ -32,8 +32,14 @@ foreach ($dirs as $dir) {
 }
 
 // AI API Configuration (placeholder - you'll need to add your API key)
-define('AI_API_KEY', ''); // Add your Claude/OpenAI API key here
-define('AI_API_ENDPOINT', 'https://api.anthropic.com/v1/messages'); // For Claude
+// Supported providers: 'anthropic' (Claude models) or 'openai' (GPT models)
+define('AI_PROVIDER', 'anthropic');
+define('AI_API_KEY', ''); // Add your AI provider API key here
+if (AI_PROVIDER === 'openai') {
+    define('AI_API_ENDPOINT', 'https://api.openai.com/v1/chat/completions');
+} else {
+    define('AI_API_ENDPOINT', 'https://api.anthropic.com/v1/messages');
+}
 define('AI_MODEL', 'claude-3-5-sonnet-20241022');
 
 // Image generation API (placeholder)
