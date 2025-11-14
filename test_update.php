@@ -34,11 +34,11 @@ echo "Test Message: $message\n\n";
 
 if (empty(AI_API_KEY)) {
     echo "ERROR: AI_API_KEY not configured in config/config.php\n";
-    echo "Please add your Claude API key to test.\n";
+    echo "Please add your AI provider API key to test.\n";
     exit;
 }
 
-echo "Calling Claude API...\n";
+echo "Calling AI API...\n";
 echo str_repeat("-", 60) . "\n\n";
 
 try {
@@ -52,12 +52,12 @@ try {
     // Build context
     $context = buildAIContext($book, null);
 
-    // Call Claude
+    // Call AI model
     global $createdItems, $updatedItems;
     $createdItems = [];
     $updatedItems = [];
 
-    $response = callClaudeAPI($message, $context, $bookId, null);
+    $response = callAIWithTools($message, $context, $bookId, null);
 
     echo "RESPONSE:\n";
     echo str_repeat("=", 60) . "\n";

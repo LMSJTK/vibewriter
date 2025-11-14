@@ -329,7 +329,7 @@ Added Marcus's backstory. What case brings him into your story?
 To extend the character system:
 
 1. **Add new fields**: Update migration + `includes/characters.php`
-2. **Add AI tool**: Define in `callClaudeAPI()` → add handler → add to context
+2. **Add AI tool**: Define in `callAIWithTools()` → add handler → add to context
 3. **Add UI feature**: Update `characters.php` and `characters.css`
 4. **Add endpoint**: Create new file in `api/` folder
 

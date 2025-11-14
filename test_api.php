@@ -1,10 +1,11 @@
 <?php
 /**
  * API Diagnostic Tool
- * Tests Claude API connectivity and configuration
+ * Tests AI provider connectivity and configuration
  */
 
 require_once __DIR__ . '/config/config.php';
+require_once __DIR__ . '/includes/ai_client.php';
 
 // Set content type
 header('Content-Type: text/plain');
@@ -48,7 +49,8 @@ if (empty(AI_API_KEY)) {
 echo "\n";
 
 // 4. Check API endpoint
-echo "4. API Endpoint: " . AI_API_ENDPOINT . "\n";
+echo "4. AI Provider: " . (usingOpenAIProvider() ? 'OpenAI' : 'Anthropic') . "\n";
+echo "   Endpoint: " . AI_API_ENDPOINT . "\n";
 echo "   Model: " . AI_MODEL . "\n";
 echo "\n";
 
@@ -81,26 +83,51 @@ echo "\n";
 if (!empty(AI_API_KEY) && function_exists('curl_init')) {
     echo "7. Testing API Connection...\n";
 
-    $payload = [
-        'model' => AI_MODEL,
-        'max_tokens' => 50,
-        'messages' => [
-            [
-                'role' => 'user',
-                'content' => 'Respond with just the word "success" if you receive this message.'
+    if (usingOpenAIProvider()) {
+        $payload = [
+            'model' => AI_MODEL,
+            'messages' => [
+                [
+                    'role' => 'system',
+                    'content' => 'You are a diagnostic assistant.'
+                ],
+                [
+                    'role' => 'user',
+                    'content' => 'Respond with just the word "success" if you receive this message.'
+                ]
+            ],
+            'max_completion_tokens' => 50,
+            'response_format' => ['type' => 'text']
+        ];
+
+        $headers = [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . AI_API_KEY
+        ];
+    } else {
+        $payload = [
+            'model' => AI_MODEL,
+            'max_tokens' => 50,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => 'Respond with just the word "success" if you receive this message.'
+                ]
             ]
-        ]
-    ];
+        ];
+
+        $headers = [
+            'Content-Type: application/json',
+            'x-api-key: ' . AI_API_KEY,
+            'anthropic-version: 2023-06-01'
+        ];
+    }
 
     $ch = curl_init(AI_API_ENDPOINT);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'x-api-key: ' . AI_API_KEY,
-        'anthropic-version: 2023-06-01'
-    ]);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
     $response = curl_exec($ch);
@@ -118,10 +145,24 @@ if (!empty(AI_API_KEY) && function_exists('curl_init')) {
         if ($httpCode === 200) {
             echo "   ✓ API call successful!\n";
             $result = json_decode($response, true);
-            if (isset($result['content'][0]['text'])) {
-                echo "   Response: " . $result['content'][0]['text'] . "\n";
+            if (usingOpenAIProvider()) {
+                $message = $result['choices'][0]['message']['content'] ?? '';
+                if (is_array($message)) {
+                    $text = '';
+                    foreach ($message as $part) {
+                        if (is_array($part) && ($part['type'] ?? '') === 'text') {
+                            $text .= $part['text'];
+                        }
+                    }
+                    $message = $text;
+                }
+                echo "   Response: " . ($message !== '' ? $message : substr($response, 0, 200) . '...') . "\n";
             } else {
-                echo "   Response format: " . substr($response, 0, 200) . "...\n";
+                if (isset($result['content'][0]['text'])) {
+                    echo "   Response: " . $result['content'][0]['text'] . "\n";
+                } else {
+                    echo "   Response format: " . substr($response, 0, 200) . "...\n";
+                }
             }
         } else {
             echo "   ✗ API call failed\n";

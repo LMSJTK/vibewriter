@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/books.php';
 require_once __DIR__ . '/../includes/characters.php';
+require_once __DIR__ . '/../includes/ai_client.php';
 
 header('Content-Type: application/json');
 
@@ -54,16 +55,16 @@ if (empty($character['personality']) || empty($character['speech_patterns'])) {
 if (empty(AI_API_KEY)) {
     jsonResponse([
         'success' => false,
-        'message' => 'AI API key not configured. Please add your Claude API key to config/config.php to enable character chat.'
+        'message' => 'AI API key not configured. Please add your AI provider API key to config/config.php to enable character chat.'
     ], 500);
 }
 
 // Build character personality context for AI
 $characterContext = buildCharacterContext($character, $book, $context);
 
-// Call Claude API in character mode
+// Call AI provider in character mode
 try {
-    $response = callClaudeAsCharacter($message, $characterContext);
+    $response = callAIAsCharacter($message, $characterContext);
 
     // Save dialogue to history
     $dialogueResult = saveCharacterDialogue(
@@ -165,14 +166,17 @@ function buildCharacterContext($character, $book, $sceneContext = null) {
 }
 
 /**
- * Call Claude API in character mode
+ * Call the configured AI provider in character mode
  */
-function callClaudeAsCharacter($message, $characterContext) {
-    $apiKey = AI_API_KEY;
-    $endpoint = AI_API_ENDPOINT;
+function callAIAsCharacter($message, $characterContext) {
+    if (usingOpenAIProvider()) {
+        return callOpenAIAsCharacter($message, $characterContext);
+    }
 
-    // Use a simpler model call without tools for character chat
-    // We don't want the character to use binder/character tools
+    return callAnthropicAsCharacter($message, $characterContext);
+}
+
+function callAnthropicAsCharacter($message, $characterContext) {
     $payload = [
         'model' => AI_MODEL,
         'max_tokens' => 1024,
@@ -184,57 +188,66 @@ function callClaudeAsCharacter($message, $characterContext) {
         ]
     ];
 
-    $jsonPayload = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-    // Log the request
-    error_log("=== CHARACTER CHAT REQUEST ===");
+    error_log("=== CHARACTER CHAT REQUEST (Anthropic) ===");
     error_log("Message: " . substr($message, 0, 100));
 
-    $ch = curl_init($endpoint);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'x-api-key: ' . $apiKey,
-        'anthropic-version: 2023-06-01'
-    ]);
+    $result = makeAnthropicAPIRequest($payload);
 
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlError = curl_error($ch);
-    $curlErrno = curl_errno($ch);
-
-    curl_close($ch);
-
-    if ($curlErrno) {
-        throw new Exception("cURL error ($curlErrno): $curlError");
-    }
-
-    if ($httpCode !== 200) {
-        $errorDetails = "API returned status code: $httpCode";
-        $errorData = json_decode($response, true);
-        if ($errorData && isset($errorData['error'])) {
-            $errorDetails .= " - " . json_encode($errorData['error']);
-        }
-        throw new Exception($errorDetails);
-    }
-
-    $result = json_decode($response, true);
-
-    if (!$result) {
-        throw new Exception("Invalid JSON response from API");
-    }
-
-    // Extract text response
     if (isset($result['content']) && is_array($result['content'])) {
         foreach ($result['content'] as $content) {
-            if ($content['type'] === 'text') {
+            if (($content['type'] ?? '') === 'text') {
                 return $content['text'];
             }
         }
     }
 
     throw new Exception("No text response from API");
+}
+
+function callOpenAIAsCharacter($message, $characterContext) {
+    $payload = [
+        'model' => AI_MODEL,
+        'messages' => [
+            [
+                'role' => 'system',
+                'content' => $characterContext
+            ],
+            [
+                'role' => 'user',
+                'content' => $message
+            ]
+        ],
+        'temperature' => 0.9,
+        'max_completion_tokens' => 1024,
+        'response_format' => ['type' => 'text']
+    ];
+
+    error_log("=== CHARACTER CHAT REQUEST (OpenAI) ===");
+    error_log("Message: " . substr($message, 0, 100));
+
+    $result = makeOpenAIRequest($payload);
+
+    if (!isset($result['choices'][0]['message'])) {
+        throw new Exception('Invalid response from OpenAI API');
+    }
+
+    $messageBlock = $result['choices'][0]['message'];
+    $content = $messageBlock['content'] ?? '';
+
+    if (is_array($content)) {
+        $text = '';
+        foreach ($content as $part) {
+            if (is_array($part) && ($part['type'] ?? '') === 'text') {
+                $text .= $part['text'];
+            }
+        }
+        if ($text !== '') {
+            return $text;
+        }
+    } elseif (is_string($content) && $content !== '') {
+        return $content;
+    }
+
+    throw new Exception('No text response from OpenAI API');
 }
 ?>

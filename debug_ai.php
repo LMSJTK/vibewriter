@@ -57,56 +57,22 @@ foreach ($keywords as $keyword) {
 echo "\n4. TOOL DEFINITIONS:\n";
 echo str_repeat("-", 60) . "\n";
 
-// Get the tools from callClaudeAPI function
-$reflection = new ReflectionFunction('callClaudeAPI');
-$filePath = $reflection->getFileName();
-$startLine = $reflection->getStartLine();
-
-// Read the function to extract tool definitions
-$lines = file($filePath);
-$inToolsSection = false;
-$toolsLines = [];
-$bracketCount = 0;
-
-for ($i = $startLine; $i < count($lines); $i++) {
-    $line = $lines[$i];
-
-    if (strpos($line, '$tools = [') !== false) {
-        $inToolsSection = true;
-        $bracketCount = 1;
-        continue;
-    }
-
-    if ($inToolsSection) {
-        // Count brackets to find the end of array
-        $bracketCount += substr_count($line, '[') - substr_count($line, ']');
-        $toolsLines[] = $line;
-
-        if ($bracketCount <= 0) {
-            break;
-        }
-    }
-}
-
-// Parse tool names
-$toolsText = implode('', $toolsLines);
-preg_match_all("/'name'\s*=>\s*'([^']+)'/", $toolsText, $matches);
-$toolNames = $matches[1];
-
-echo "Defined tools: " . count($toolNames) . "\n";
-foreach ($toolNames as $name) {
-    echo "  - $name\n";
+$tools = getAIWritingTools();
+echo "Defined tools: " . count($tools) . "\n";
+foreach ($tools as $tool) {
+    echo "  - " . $tool['name'] . "\n";
 }
 
 echo "\n5. API CONFIGURATION:\n";
 echo str_repeat("-", 60) . "\n";
+echo "Provider: " . (usingOpenAIProvider() ? 'OpenAI' : 'Anthropic') . "\n";
 echo "Endpoint: " . AI_API_ENDPOINT . "\n";
 echo "Model: " . AI_MODEL . "\n";
 echo "API Key configured: " . (empty(AI_API_KEY) ? 'NO ❌' : 'YES ✓ (' . substr(AI_API_KEY, 0, 10) . '...)') . "\n";
 
 if (empty(AI_API_KEY)) {
     echo "\n⚠️  WARNING: AI_API_KEY is not configured!\n";
-    echo "Update config/config.php with your Claude API key.\n";
+    echo "Update config/config.php with your AI provider API key.\n";
 }
 
 echo "\n6. TEST MESSAGE:\n";

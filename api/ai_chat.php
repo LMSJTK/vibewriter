@@ -1,11 +1,12 @@
 <?php
 /**
  * AI Chat Endpoint
- * Communicates with Claude API for AI assistance
+ * Communicates with the configured AI provider for assistance
  */
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/books.php';
+require_once __DIR__ . '/../includes/ai_client.php';
 
 // Skip web-specific checks when running in CLI test mode
 if (!defined('CLI_TEST_MODE') || !CLI_TEST_MODE) {
@@ -45,14 +46,14 @@ if (!$book) {
 if (empty(AI_API_KEY)) {
     jsonResponse([
         'success' => true,
-        'response' => "I'm your AI assistant, but I need to be configured with an API key first. Please add your Claude API key to config/config.php to enable AI features.\n\nIn the meantime, I can help you understand that I'm designed to:\n- Help brainstorm plot ideas\n- Develop characters\n- Suggest scene descriptions\n- Organize your story structure\n- Generate character images\n\nPlease configure the API key to enable these features!"
+        'response' => "I'm your AI assistant, but I need to be configured with an API key first. Please add your AI provider API key to config/config.php to enable AI features.\n\nIn the meantime, I can help you understand that I'm designed to:\n- Help brainstorm plot ideas\n- Develop characters\n- Suggest scene descriptions\n- Organize your story structure\n- Generate character images\n\nPlease configure the API key to enable these features!"
     ]);
 }
 
 // Build context for AI
 $context = buildAIContext($book, $itemId);
 
-// Call Claude API
+// Call AI model
 try {
     // Track if any items or characters were created or updated
     global $createdItems, $updatedItems, $createdCharacters, $updatedCharacters;
@@ -61,7 +62,7 @@ try {
     $createdCharacters = [];
     $updatedCharacters = [];
 
-    $response = callClaudeAPI($message, $context, $bookId, $itemId);
+    $response = callAIWithTools($message, $context, $bookId, $itemId);
 
     // Save conversation to database
     saveAIConversation($bookId, getCurrentUserId(), $message, $response);
@@ -188,276 +189,21 @@ function buildAIContext($book, $itemId) {
 }
 
 /**
- * Call Claude API with tool support
+ * Call AI model with tool support
  */
-function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
-    $apiKey = AI_API_KEY;
-    $endpoint = AI_API_ENDPOINT;
+function callAIWithTools($message, $context, $bookId = null, $itemId = null) {
+    if (usingOpenAIProvider()) {
+        return callOpenAIWithTools($message, $context, $bookId, $itemId);
+    }
 
-    // Define tools available to the AI
-    $tools = [
-        [
-            'name' => 'read_binder_items',
-            'description' => 'Reads all items in the book\'s binder structure. Use this to see what chapters, scenes, and other items already exist in the book. Returns the hierarchical structure with all items.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'parent_id' => [
-                        'type' => 'number',
-                        'description' => 'Optional: Filter to only show children of a specific parent item'
-                    ]
-                ]
-            ]
-        ],
-        [
-            'name' => 'read_binder_item',
-            'description' => 'Reads detailed information about a specific binder item including its title, type, synopsis, content, and metadata. Use this to examine the details of a particular chapter, scene, or other item.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'item_id' => [
-                        'type' => 'number',
-                        'description' => 'The ID of the item to read'
-                    ]
-                ],
-                'required' => ['item_id']
-            ]
-        ],
-        [
-            'name' => 'create_binder_item',
-            'description' => 'Creates a new item in the book\'s binder structure (chapter, scene, note, etc.). Use this when the user asks you to create, add, or outline new sections of their book.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'title' => [
-                        'type' => 'string',
-                        'description' => 'The title of the item to create'
-                    ],
-                    'item_type' => [
-                        'type' => 'string',
-                        'enum' => ['folder', 'chapter', 'scene', 'note', 'research'],
-                        'description' => 'The type of item: folder (for organizing), chapter, scene, note, or research'
-                    ],
-                    'synopsis' => [
-                        'type' => 'string',
-                        'description' => 'A brief synopsis or description of this item (optional)'
-                    ],
-                    'content' => [
-                        'type' => 'string',
-                        'description' => 'The initial content for this item (optional)'
-                    ],
-                    'parent_id' => [
-                        'type' => 'number',
-                        'description' => 'The ID of the parent item to nest this under (optional, defaults to root level)'
-                    ]
-                ],
-                'required' => ['title', 'item_type']
-            ]
-        ],
-        [
-            'name' => 'update_binder_item',
-            'description' => 'Updates an existing binder item. Can update title, synopsis, content, status, label, or metadata. Use this to modify, edit, or revise existing chapters, scenes, or other items.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'item_id' => [
-                        'type' => 'number',
-                        'description' => 'The ID of the item to update'
-                    ],
-                    'title' => [
-                        'type' => 'string',
-                        'description' => 'New title for the item (optional)'
-                    ],
-                    'synopsis' => [
-                        'type' => 'string',
-                        'description' => 'New synopsis/description (optional)'
-                    ],
-                    'content' => [
-                        'type' => 'string',
-                        'description' => 'New content for the item (optional)'
-                    ],
-                    'status' => [
-                        'type' => 'string',
-                        'description' => 'New status (e.g., "draft", "in_progress", "complete") (optional)'
-                    ],
-                    'label' => [
-                        'type' => 'string',
-                        'description' => 'New label/tag for the item (optional)'
-                    ]
-                ],
-                'required' => ['item_id']
-            ]
-        ],
-        [
-            'name' => 'delete_binder_item',
-            'description' => 'Deletes a binder item and all its children. Use this carefully when the user wants to remove a chapter, scene, or other item from their book.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'item_id' => [
-                        'type' => 'number',
-                        'description' => 'The ID of the item to delete'
-                    ]
-                ],
-                'required' => ['item_id']
-            ]
-        ],
-        [
-            'name' => 'read_characters',
-            'description' => 'Reads all characters in the book. Use this to see what characters have been created and their basic information.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => new stdClass()
-            ]
-        ],
-        [
-            'name' => 'read_character',
-            'description' => 'Reads detailed information about a specific character including personality, appearance, background, relationships, and dialogue patterns.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'character_id' => [
-                        'type' => 'number',
-                        'description' => 'The ID of the character to read'
-                    ]
-                ],
-                'required' => ['character_id']
-            ]
-        ],
-        [
-            'name' => 'create_character',
-            'description' => 'Creates a new character when they are first mentioned or discussed. Use this to add characters to the book\'s character database as they come up in conversation.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'name' => [
-                        'type' => 'string',
-                        'description' => 'The character\'s name'
-                    ],
-                    'role' => [
-                        'type' => 'string',
-                        'enum' => ['protagonist', 'antagonist', 'supporting', 'minor'],
-                        'description' => 'The character\'s role in the story'
-                    ],
-                    'physical_description' => [
-                        'type' => 'string',
-                        'description' => 'Physical appearance, clothing style, distinctive features'
-                    ],
-                    'personality' => [
-                        'type' => 'string',
-                        'description' => 'Personality traits, temperament, quirks'
-                    ],
-                    'speech_patterns' => [
-                        'type' => 'string',
-                        'description' => 'How they speak: dialect, common phrases, tone'
-                    ],
-                    'background' => [
-                        'type' => 'string',
-                        'description' => 'Backstory, history, formative experiences'
-                    ],
-                    'motivation' => [
-                        'type' => 'string',
-                        'description' => 'Goals, desires, what drives them'
-                    ],
-                    'age' => [
-                        'type' => 'number',
-                        'description' => 'Age in years (optional)'
-                    ],
-                    'gender' => [
-                        'type' => 'string',
-                        'description' => 'Gender identity (optional)'
-                    ]
-                ],
-                'required' => ['name']
-            ]
-        ],
-        [
-            'name' => 'update_character',
-            'description' => 'Updates character information as new details are discussed or revealed. Use this to add or modify character details, personality, appearance, background, relationships, etc.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'character_id' => [
-                        'type' => 'number',
-                        'description' => 'The ID of the character to update'
-                    ],
-                    'name' => [
-                        'type' => 'string',
-                        'description' => 'Updated name (optional)'
-                    ],
-                    'role' => [
-                        'type' => 'string',
-                        'enum' => ['protagonist', 'antagonist', 'supporting', 'minor'],
-                        'description' => 'Updated role (optional)'
-                    ],
-                    'physical_description' => [
-                        'type' => 'string',
-                        'description' => 'Updated physical appearance (optional)'
-                    ],
-                    'personality' => [
-                        'type' => 'string',
-                        'description' => 'Updated personality traits (optional)'
-                    ],
-                    'speech_patterns' => [
-                        'type' => 'string',
-                        'description' => 'Updated speech patterns (optional)'
-                    ],
-                    'voice_description' => [
-                        'type' => 'string',
-                        'description' => 'Description of how they speak for dialogue generation (optional)'
-                    ],
-                    'background' => [
-                        'type' => 'string',
-                        'description' => 'Updated background (optional)'
-                    ],
-                    'motivation' => [
-                        'type' => 'string',
-                        'description' => 'Updated motivation (optional)'
-                    ],
-                    'arc' => [
-                        'type' => 'string',
-                        'description' => 'Character arc and development (optional)'
-                    ],
-                    'relationships' => [
-                        'type' => 'string',
-                        'description' => 'Relationships with other characters (optional)'
-                    ],
-                    'notes' => [
-                        'type' => 'string',
-                        'description' => 'Additional notes (optional)'
-                    ],
-                    'age' => [
-                        'type' => 'number',
-                        'description' => 'Updated age (optional)'
-                    ],
-                    'gender' => [
-                        'type' => 'string',
-                        'description' => 'Updated gender (optional)'
-                    ]
-                ],
-                'required' => ['character_id']
-            ]
-        ],
-        [
-            'name' => 'delete_character',
-            'description' => 'Deletes a character from the book. Use this carefully when the user wants to remove a character.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'character_id' => [
-                        'type' => 'number',
-                        'description' => 'The ID of the character to delete'
-                    ]
-                ],
-                'required' => ['character_id']
-            ]
-        ]
-    ];
+    return callAnthropicWithTools($message, $context, $bookId, $itemId);
+}
 
+function callAnthropicWithTools($message, $context, $bookId = null, $itemId = null) {
     $payload = [
         'model' => AI_MODEL,
         'max_tokens' => 2048,
-        'tools' => $tools,
+        'tools' => getAIWritingTools(),
         'messages' => [
             [
                 'role' => 'user',
@@ -466,20 +212,16 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
         ]
     ];
 
-    // Make initial API call
-    $result = makeClaudeAPIRequest($payload);
+    $result = makeAnthropicAPIRequest($payload);
 
-    // Handle multiple rounds of tool use (agentic loop)
-    // This allows the AI to call tools sequentially (e.g., search for item, then update it)
-    $maxToolRounds = 5; // Prevent infinite loops
+    $maxToolRounds = 5;
     $toolRound = 0;
 
     while (isset($result['stop_reason']) && $result['stop_reason'] === 'tool_use' && $toolRound < $maxToolRounds) {
         $toolRound++;
 
-        // Log the stop reason for debugging
-        error_log("Claude API stop_reason: " . $result['stop_reason'] . " (round $toolRound)");
-        error_log("Claude API content types: " . json_encode(array_map(function($c) { return $c['type']; }, $result['content'])));
+        error_log("Anthropic stop_reason: " . $result['stop_reason'] . " (round $toolRound)");
+        error_log("Anthropic content types: " . json_encode(array_map(function($c) { return $c['type']; }, $result['content'])));
 
         $toolResults = [];
 
@@ -494,30 +236,18 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
             }
         }
 
-        // Fix tool_use content to ensure input fields are objects, not arrays
-        // This prevents PHP from encoding empty objects as [] instead of {}
         $assistantContent = $result['content'];
         foreach ($assistantContent as &$content) {
-            if ($content['type'] === 'tool_use' && isset($content['input'])) {
-                // Ensure input is always an object for JSON encoding
-                // Convert empty arrays to objects, and preserve associative arrays as objects
-                if (is_array($content['input'])) {
-                    if (empty($content['input'])) {
-                        // Empty array -> empty object
-                        $content['input'] = new stdClass();
-                    } elseif (array_keys($content['input']) === range(0, count($content['input']) - 1)) {
-                        // Numeric array - this shouldn't happen for tool inputs, but keep as-is
-                        // (tool inputs should always be objects/associative arrays)
-                    } else {
-                        // Associative array - ensure it stays as object
-                        // json_encode will handle this correctly as long as it's not empty
-                    }
+            if ($content['type'] === 'tool_use' && isset($content['input']) && is_array($content['input'])) {
+                if (empty($content['input'])) {
+                    $content['input'] = new stdClass();
+                } elseif (array_keys($content['input']) === range(0, count($content['input']) - 1)) {
+                    // Leave numeric arrays as-is
                 }
             }
         }
-        unset($content); // Break reference
+        unset($content);
 
-        // Continue conversation with tool results
         $payload['messages'][] = [
             'role' => 'assistant',
             'content' => $assistantContent
@@ -527,115 +257,380 @@ function callClaudeAPI($message, $context, $bookId = null, $itemId = null) {
             'content' => $toolResults
         ];
 
-        // Get next response (might use more tools or return final answer)
-        $result = makeClaudeAPIRequest($payload);
+        $result = makeAnthropicAPIRequest($payload);
     }
 
-    // Log final stop reason
-    error_log("Claude API final stop_reason: " . ($result['stop_reason'] ?? 'unknown') . " after $toolRound tool rounds");
+    error_log("Anthropic final stop_reason: " . ($result['stop_reason'] ?? 'unknown') . " after $toolRound tool rounds");
 
-    // Extract text response
-    foreach ($result['content'] as $content) {
-        if ($content['type'] === 'text') {
-            return $content['text'];
+    if (isset($result['content'])) {
+        foreach ($result['content'] as $content) {
+            if ($content['type'] === 'text') {
+                return $content['text'];
+            }
         }
     }
 
     throw new Exception("No text response from API");
 }
 
-/**
- * Safely encode JSON for Claude API
- * Ensures that objects are properly encoded as {} not []
- */
-function encodeForClaudeAPI($data) {
-    // Use JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE for cleaner output
-    // JSON_PRESERVE_ZERO_FRACTION ensures numbers are properly formatted
-    return json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
-}
+function callOpenAIWithTools($message, $context, $bookId = null, $itemId = null) {
+    $payload = [
+        'model' => AI_MODEL,
+        'messages' => [
+            [
+                'role' => 'system',
+                'content' => $context
+            ],
+            [
+                'role' => 'user',
+                'content' => $message
+            ]
+        ],
+        'temperature' => 0.8,
+        'max_completion_tokens' => 2048,
+        'tools' => convertToolsForOpenAI(getAIWritingTools()),
+        'tool_choice' => 'auto',
+        'response_format' => ['type' => 'text']
+    ];
 
-/**
- * Make a request to Claude API
- */
-function makeClaudeAPIRequest($payload) {
-    $apiKey = AI_API_KEY;
-    $endpoint = AI_API_ENDPOINT;
+    $maxToolRounds = 5;
+    $toolRound = 0;
 
-    $jsonPayload = encodeForClaudeAPI($payload);
+    while ($toolRound < $maxToolRounds) {
+        $result = makeOpenAIRequest($payload);
 
-    // Log the payload for debugging
-    error_log("=== CLAUDE API REQUEST ===");
-    error_log("Payload size: " . strlen($jsonPayload) . " bytes");
-    error_log("Model: " . ($payload['model'] ?? 'unknown'));
-    error_log("Tools count: " . (isset($payload['tools']) ? count($payload['tools']) : 0));
-    if (isset($payload['messages'])) {
-        error_log("Messages count: " . count($payload['messages']));
-        $lastMessage = end($payload['messages']);
-        error_log("Last message role: " . ($lastMessage['role'] ?? 'unknown'));
-    }
-    // Uncomment to see full payload: error_log("Full payload: " . $jsonPayload);
-
-    $ch = curl_init($endpoint);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'x-api-key: ' . $apiKey,
-        'anthropic-version: 2023-06-01'
-    ]);
-
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlError = curl_error($ch);
-    $curlErrno = curl_errno($ch);
-
-    curl_close($ch);
-
-    if ($curlErrno) {
-        throw new Exception("cURL error ($curlErrno): $curlError");
-    }
-
-    if ($httpCode !== 200) {
-        $errorDetails = "API returned status code: $httpCode";
-        $errorData = json_decode($response, true);
-        if ($errorData && isset($errorData['error'])) {
-            $errorDetails .= " - " . json_encode($errorData['error']);
-        } else {
-            $errorDetails .= " - Response: " . substr($response, 0, 500);
+        if (!isset($result['choices'][0]['message'])) {
+            throw new Exception('Invalid response from OpenAI API');
         }
-        // Log the failed payload for debugging
-        error_log("Failed Claude API request. Payload: " . substr($jsonPayload, 0, 1000));
-        throw new Exception($errorDetails);
-    }
 
-    $result = json_decode($response, true);
+        $choice = $result['choices'][0];
+        $messageBlock = $choice['message'];
 
-    if (!$result) {
-        throw new Exception("Invalid JSON response from API");
-    }
+        if (!empty($messageBlock['tool_calls'])) {
+            $toolRound++;
 
-    // Log the response details
-    error_log("=== CLAUDE API RESPONSE ===");
-    error_log("Stop reason: " . ($result['stop_reason'] ?? 'unknown'));
-    error_log("Content blocks: " . (isset($result['content']) ? count($result['content']) : 0));
-    if (isset($result['content'])) {
-        foreach ($result['content'] as $idx => $block) {
-            error_log("Block $idx type: " . ($block['type'] ?? 'unknown'));
-            if ($block['type'] === 'text') {
-                error_log("Text preview: " . substr($block['text'] ?? '', 0, 100));
-            } elseif ($block['type'] === 'tool_use') {
-                error_log("Tool: " . ($block['name'] ?? 'unknown'));
-                error_log("Tool input: " . json_encode($block['input'] ?? []));
+            error_log("OpenAI tool_calls round $toolRound: " . count($messageBlock['tool_calls']));
+
+            $payload['messages'][] = $messageBlock;
+
+            foreach ($messageBlock['tool_calls'] as $toolCall) {
+                $arguments = $toolCall['function']['arguments'] ?? '{}';
+                $decodedArguments = json_decode($arguments, true);
+                if ($decodedArguments === null) {
+                    $decodedArguments = [];
+                }
+
+                $toolInput = [
+                    'name' => $toolCall['function']['name'] ?? '',
+                    'input' => $decodedArguments
+                ];
+
+                $toolResult = handleToolUse($toolInput, $bookId, $itemId);
+
+                $payload['messages'][] = [
+                    'role' => 'tool',
+                    'tool_call_id' => $toolCall['id'] ?? uniqid('tool_', true),
+                    'content' => json_encode($toolResult)
+                ];
             }
+
+            continue;
         }
+
+        $content = $messageBlock['content'] ?? '';
+        if (is_array($content)) {
+            $text = '';
+            foreach ($content as $part) {
+                if (is_array($part) && ($part['type'] ?? '') === 'text') {
+                    $text .= $part['text'];
+                }
+            }
+            if ($text !== '') {
+                return $text;
+            }
+        } elseif (is_string($content) && $content !== '') {
+            return $content;
+        }
+
+        if (($choice['finish_reason'] ?? '') === 'length') {
+            throw new Exception('OpenAI response was truncated (max tokens reached)');
+        }
+
+        break;
     }
 
-    return $result;
+    throw new Exception('No text response from OpenAI API');
+}
+
+function getAIWritingTools() {
+    static $tools = null;
+
+    if ($tools === null) {
+        $tools = [
+            [
+                'name' => 'read_binder_items',
+                'description' => 'Reads all items in the book\'s binder structure. Use this to see what chapters, scenes, and other items already exist in the book. Returns the hierarchical structure with all items.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'parent_id' => [
+                            'type' => 'number',
+                            'description' => 'Optional: Filter to only show children of a specific parent item'
+                        ]
+                    ]
+                ]
+            ],
+            [
+                'name' => 'read_binder_item',
+                'description' => 'Reads detailed information about a specific binder item including its title, type, synopsis, content, and metadata. Use this to examine the details of a particular chapter, scene, or other item.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'item_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the item to read'
+                        ]
+                    ],
+                    'required' => ['item_id']
+                ]
+            ],
+            [
+                'name' => 'create_binder_item',
+                'description' => 'Creates a new item in the book\'s binder structure (chapter, scene, note, etc.). Use this when the user asks you to create, add, or outline new sections of their book.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'title' => [
+                            'type' => 'string',
+                            'description' => 'The title of the item to create'
+                        ],
+                        'item_type' => [
+                            'type' => 'string',
+                            'enum' => ['folder', 'chapter', 'scene', 'note', 'research'],
+                            'description' => 'The type of item: folder (for organizing), chapter, scene, note, or research'
+                        ],
+                        'synopsis' => [
+                            'type' => 'string',
+                            'description' => 'A brief synopsis or description of this item (optional)'
+                        ],
+                        'content' => [
+                            'type' => 'string',
+                            'description' => 'The initial content for this item (optional)'
+                        ],
+                        'parent_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the parent item to nest this under (optional, defaults to root level)'
+                        ]
+                    ],
+                    'required' => ['title', 'item_type']
+                ]
+            ],
+            [
+                'name' => 'update_binder_item',
+                'description' => 'Updates an existing binder item. Can update title, synopsis, content, status, label, or metadata. Use this to modify, edit, or revise existing chapters, scenes, or other items.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'item_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the item to update'
+                        ],
+                        'title' => [
+                            'type' => 'string',
+                            'description' => 'New title for the item (optional)'
+                        ],
+                        'synopsis' => [
+                            'type' => 'string',
+                            'description' => 'New synopsis/description (optional)'
+                        ],
+                        'content' => [
+                            'type' => 'string',
+                            'description' => 'New content for the item (optional)'
+                        ],
+                        'status' => [
+                            'type' => 'string',
+                            'description' => 'New status (e.g., "draft", "in_progress", "complete") (optional)'
+                        ],
+                        'label' => [
+                            'type' => 'string',
+                            'description' => 'New label/tag for the item (optional)'
+                        ]
+                    ],
+                    'required' => ['item_id']
+                ]
+            ],
+            [
+                'name' => 'delete_binder_item',
+                'description' => 'Deletes a binder item and all its children. Use this carefully when the user wants to remove a chapter, scene, or other item from their book.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'item_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the item to delete'
+                        ]
+                    ],
+                    'required' => ['item_id']
+                ]
+            ],
+            [
+                'name' => 'read_characters',
+                'description' => 'Reads all characters in the book. Use this to see what characters have been created and their basic information.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => new stdClass()
+                ]
+            ],
+            [
+                'name' => 'read_character',
+                'description' => 'Reads detailed information about a specific character including personality, appearance, background, relationships, and dialogue patterns.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'character_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the character to read'
+                        ]
+                    ],
+                    'required' => ['character_id']
+                ]
+            ],
+            [
+                'name' => 'create_character',
+                'description' => 'Creates a new character when they are first mentioned or discussed. Use this to add characters to the book\'s character database as they come up in conversation.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'name' => [
+                            'type' => 'string',
+                            'description' => 'The character\'s name'
+                        ],
+                        'role' => [
+                            'type' => 'string',
+                            'enum' => ['protagonist', 'antagonist', 'supporting', 'minor'],
+                            'description' => 'The character\'s role in the story'
+                        ],
+                        'physical_description' => [
+                            'type' => 'string',
+                            'description' => 'Physical appearance, clothing style, distinctive features'
+                        ],
+                        'personality' => [
+                            'type' => 'string',
+                            'description' => 'Personality traits, temperament, quirks'
+                        ],
+                        'speech_patterns' => [
+                            'type' => 'string',
+                            'description' => 'How they speak: dialect, common phrases, tone'
+                        ],
+                        'background' => [
+                            'type' => 'string',
+                            'description' => 'Backstory, history, formative experiences'
+                        ],
+                        'motivation' => [
+                            'type' => 'string',
+                            'description' => 'Goals, desires, what drives them'
+                        ],
+                        'age' => [
+                            'type' => 'number',
+                            'description' => 'Age in years (optional)'
+                        ],
+                        'gender' => [
+                            'type' => 'string',
+                            'description' => 'Gender identity (optional)'
+                        ]
+                    ],
+                    'required' => ['name']
+                ]
+            ],
+            [
+                'name' => 'update_character',
+                'description' => 'Updates character information as new details are discussed or revealed. Use this to add or modify character details, personality, appearance, background, relationships, etc.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'character_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the character to update'
+                        ],
+                        'name' => [
+                            'type' => 'string',
+                            'description' => 'Updated name (optional)'
+                        ],
+                        'role' => [
+                            'type' => 'string',
+                            'enum' => ['protagonist', 'antagonist', 'supporting', 'minor'],
+                            'description' => 'Updated role (optional)'
+                        ],
+                        'physical_description' => [
+                            'type' => 'string',
+                            'description' => 'Updated physical appearance (optional)'
+                        ],
+                        'personality' => [
+                            'type' => 'string',
+                            'description' => 'Updated personality traits (optional)'
+                        ],
+                        'speech_patterns' => [
+                            'type' => 'string',
+                            'description' => 'Updated speech patterns (optional)'
+                        ],
+                        'voice_description' => [
+                            'type' => 'string',
+                            'description' => 'Description of how they speak for dialogue generation (optional)'
+                        ],
+                        'background' => [
+                            'type' => 'string',
+                            'description' => 'Updated background (optional)'
+                        ],
+                        'motivation' => [
+                            'type' => 'string',
+                            'description' => 'Updated motivation (optional)'
+                        ],
+                        'arc' => [
+                            'type' => 'string',
+                            'description' => 'Character arc and development (optional)'
+                        ],
+                        'relationships' => [
+                            'type' => 'string',
+                            'description' => 'Relationships with other characters (optional)'
+                        ],
+                        'notes' => [
+                            'type' => 'string',
+                            'description' => 'Additional notes (optional)'
+                        ],
+                        'age' => [
+                            'type' => 'number',
+                            'description' => 'Updated age (optional)'
+                        ],
+                        'gender' => [
+                            'type' => 'string',
+                            'description' => 'Updated gender (optional)'
+                        ]
+                    ],
+                    'required' => ['character_id']
+                ]
+            ],
+            [
+                'name' => 'delete_character',
+                'description' => 'Deletes a character from the book. Use this carefully when the user wants to remove a character.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'character_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the character to delete'
+                        ]
+                    ],
+                    'required' => ['character_id']
+                ]
+            ]
+        ];
+    }
+
+    return $tools;
 }
 
 /**
- * Handle tool use requests from Claude
+ * Handle tool use requests from the AI assistant
  */
 function handleToolUse($toolUse, $bookId, $itemId) {
     $toolName = $toolUse['name'];
