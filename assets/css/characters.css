@@ -567,7 +567,7 @@
     right: -450px;
     width: 450px;
     height: 100vh;
-    background: var(--bg-primary);
+    background: white;
     border-left: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
