@@ -51,8 +51,18 @@ $stats = getCharacterStats($characterId);
             </div>
         </div>
         <div class="navbar-right">
-            <?php if (!empty($character['personality']) && !empty($character['speech_patterns'])): ?>
+            <?php
+            // Debug: Check what values we have
+            $hasPersonality = !empty($character['personality']);
+            $hasSpeechPatterns = !empty($character['speech_patterns']);
+            ?>
+            <?php if ($hasPersonality && $hasSpeechPatterns): ?>
                 <button class="btn btn-sm btn-chat" onclick="chatWithCharacter()">💬 Chat with <?php echo h($character['name']); ?></button>
+            <?php else: ?>
+                <!-- Debug: Show why button is hidden -->
+                <button class="btn btn-sm btn-secondary" disabled title="Missing: <?php echo !$hasPersonality ? 'Personality ' : ''; echo !$hasSpeechPatterns ? 'Speech Patterns' : ''; ?>">
+                    💬 Chat (Missing Data)
+                </button>
             <?php endif; ?>
             <button class="btn btn-sm btn-danger" onclick="deleteCharacter()">🗑️ Delete</button>
         </div>
