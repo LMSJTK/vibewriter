@@ -391,17 +391,28 @@ function generateCharacterImage($character, $additionalPrompt = null) {
     $result = json_decode($response, true);
 
     // Extract base64 image data from response
-    // Response format: candidates[0].content.parts[0].inlineData.data
-    if (!isset($result['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
+    // Response format: candidates[0].content.parts[N].inlineData.data
+    // The image may be in any part (text is often in parts[0], image in parts[1])
+    $base64Image = null;
+    $mimeType = 'image/png';
+
+    if (isset($result['candidates'][0]['content']['parts'])) {
+        foreach ($result['candidates'][0]['content']['parts'] as $part) {
+            if (isset($part['inlineData']['data'])) {
+                $base64Image = $part['inlineData']['data'];
+                $mimeType = $part['inlineData']['mimeType'] ?? 'image/png';
+                break;
+            }
+        }
+    }
+
+    if (!$base64Image) {
         return [
             'success' => false,
             'message' => 'No image data in Gemini response',
             'response' => $result
         ];
     }
-
-    $base64Image = $result['candidates'][0]['content']['parts'][0]['inlineData']['data'];
-    $mimeType = $result['candidates'][0]['content']['parts'][0]['inlineData']['mimeType'] ?? 'image/png';
 
     // Determine file extension from mime type
     $extension = 'png';
