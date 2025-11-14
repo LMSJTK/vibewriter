@@ -40,6 +40,9 @@ define('AI_MODEL', 'claude-3-5-sonnet-20241022');
 define('IMAGE_API_KEY', ''); // Add your image generation API key
 define('IMAGE_API_ENDPOINT', ''); // e.g., DALL-E, Midjourney, Stable Diffusion
 
+// Google Gemini API for image generation
+define('GEMINI_API_KEY', ''); // Add your Gemini API key here
+
 // Timezone
 date_default_timezone_set('UTC');
 

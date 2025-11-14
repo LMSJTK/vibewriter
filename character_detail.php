@@ -69,7 +69,7 @@ $stats = getCharacterStats($characterId);
                     </div>
                 <?php endif; ?>
                 <div class="image-actions">
-                    <button class="btn btn-sm" onclick="alert('Image generation coming soon!')">🎨 Generate Image</button>
+                    <button class="btn btn-sm" id="generateImageBtn" onclick="generateImage()">🎨 Generate Image</button>
                     <button class="btn btn-sm" onclick="alert('Image upload coming soon!')">📤 Upload Image</button>
                 </div>
                 <?php if ($character['ai_generated']): ?>
@@ -194,10 +194,13 @@ $stats = getCharacterStats($characterId);
                     <div class="empty-icon">🖼️</div>
                     <h3>No Images Yet</h3>
                     <p>Generate or upload images to visualize this character.</p>
-                    <button class="btn btn-primary" onclick="alert('Image generation coming soon!')">Generate Image with AI</button>
+                    <button class="btn btn-primary" onclick="generateImage()">Generate Image with AI</button>
                 </div>
             <?php else: ?>
-                <div class="images-grid">
+                <div style="margin-bottom: 20px;">
+                    <button class="btn btn-primary" onclick="generateImage()">🎨 Generate Another Image</button>
+                </div>
+                <div class="images-grid" id="imagesGrid">
                     <?php foreach ($images as $image): ?>
                         <div class="image-item <?php echo $image['is_primary'] ? 'primary' : ''; ?>">
                             <img src="<?php echo h($image['file_path']); ?>" alt="<?php echo h($character['name']); ?>">
@@ -238,10 +241,55 @@ $stats = getCharacterStats($characterId);
         </div>
     </div>
 
+    <!-- Character Chat Sidebar -->
+    <aside class="character-chat-sidebar" id="characterChatSidebar">
+        <div class="character-chat-header">
+            <div class="chat-header-content">
+                <h3>Chat with <?php echo h($character['name']); ?></h3>
+                <span class="chat-mode-badge">🎭 Character Mode</span>
+            </div>
+            <button class="close-btn" onclick="closeCharacterChat()">×</button>
+        </div>
+
+        <div class="character-chat-info">
+            <p><strong><?php echo h($character['name']); ?></strong> will respond based on their personality, speech patterns, and background.</p>
+            <p>Use this to develop authentic dialogue for your story!</p>
+        </div>
+
+        <div class="character-chat-messages" id="characterChatMessages">
+            <div class="character-message">
+                <div class="character-avatar"><?php echo strtoupper(substr($character['name'], 0, 1)); ?></div>
+                <div class="message-content">
+                    <?php if (!empty($character['dialogue_examples'])): ?>
+                        <?php
+                        // Show first example quote as greeting
+                        $examples = explode("\n", $character['dialogue_examples']);
+                        $firstExample = trim($examples[0], '"\' ');
+                        echo h($firstExample);
+                        ?>
+                    <?php else: ?>
+                        Hello. What would you like to talk about?
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="character-chat-input-area">
+            <div class="context-input">
+                <input type="text" id="sceneContext" placeholder="Scene context (optional): e.g., 'in a tense confrontation'">
+            </div>
+            <div class="message-input">
+                <textarea id="characterChatInput" placeholder="Talk to <?php echo h($character['name']); ?>..." rows="3"></textarea>
+                <button class="btn btn-primary" onclick="sendCharacterMessage()">Send</button>
+            </div>
+        </div>
+    </aside>
+
     <script>
         const bookId = <?php echo $bookId; ?>;
         const characterId = <?php echo $characterId; ?>;
         const characterName = <?php echo json_encode($character['name']); ?>;
+        const characterHasDialogueCapability = <?php echo (!empty($character['personality']) && !empty($character['speech_patterns'])) ? 'true' : 'false'; ?>;
     </script>
     <script src="assets/js/character_detail.js"></script>
 </body>
