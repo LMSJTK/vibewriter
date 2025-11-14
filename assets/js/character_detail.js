@@ -365,6 +365,60 @@ function saveDialogueToScene(dialogueId) {
     alert('Save to scene feature coming soon! This will let you export good dialogue snippets directly into your manuscript.');
 }
 
+// Generate Character Image
+async function generateImage() {
+    const generateBtn = document.getElementById('generateImageBtn');
+
+    // Confirm if character has limited description
+    const physicalDesc = document.getElementById('physical_description')?.value;
+    if (!physicalDesc || physicalDesc.length < 20) {
+        if (!confirm('This character has minimal physical description. The AI will do its best, but you may want to add more details in the Profile tab first. Generate anyway?')) {
+            return;
+        }
+    }
+
+    // Disable button and show loading state
+    if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '⏳ Generating...';
+    }
+
+    try {
+        const response = await fetch('api/generate_character_image.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                book_id: bookId,
+                character_id: characterId,
+                additional_prompt: null // Could add a prompt input field later
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Show success message
+            alert('Image generated successfully! Reloading page to display...');
+            // Reload page to show new image
+            window.location.reload();
+        } else {
+            alert('Failed to generate image: ' + (result.message || 'Unknown error'));
+            console.error('Generation error:', result);
+        }
+    } catch (error) {
+        console.error('Image generation failed:', error);
+        alert('Failed to generate image: ' + error.message);
+    } finally {
+        // Re-enable button
+        if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '🎨 Generate Image';
+        }
+    }
+}
+
 // Utility function
 function escapeHtml(text) {
     const div = document.createElement('div');

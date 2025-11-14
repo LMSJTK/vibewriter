@@ -319,4 +319,126 @@ function getCharacterStats($characterId) {
         'mention_count' => $mentionCount
     ];
 }
+
+/**
+ * Generate character image using Google Gemini API
+ */
+function generateCharacterImage($character, $additionalPrompt = null) {
+    if (empty(GEMINI_API_KEY)) {
+        return ['success' => false, 'message' => 'Gemini API key not configured'];
+    }
+
+    // Build image generation prompt from character details
+    $prompt = "Create a detailed character portrait of ";
+    $prompt .= $character['name'];
+
+    if (!empty($character['physical_description'])) {
+        $prompt .= ". Physical appearance: " . $character['physical_description'];
+    }
+
+    if (!empty($character['age'])) {
+        $prompt .= ". Age: " . $character['age'];
+    }
+
+    if (!empty($character['gender'])) {
+        $prompt .= ". Gender: " . $character['gender'];
+    }
+
+    if (!empty($character['personality'])) {
+        $prompt .= ". Personality traits to reflect in expression: " . substr($character['personality'], 0, 200);
+    }
+
+    if ($additionalPrompt) {
+        $prompt .= ". " . $additionalPrompt;
+    }
+
+    $prompt .= ". Style: professional book character illustration, high quality, detailed";
+
+    // Call Gemini API
+    $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
+
+    $data = [
+        'contents' => [
+            [
+                'parts' => [
+                    ['text' => $prompt]
+                ]
+            ]
+        ]
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'x-goog-api-key: ' . GEMINI_API_KEY
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        return [
+            'success' => false,
+            'message' => 'Gemini API request failed with status code: ' . $httpCode,
+            'response' => $response
+        ];
+    }
+
+    $result = json_decode($response, true);
+
+    // Extract base64 image data from response
+    // Response format: candidates[0].content.parts[0].inlineData.data
+    if (!isset($result['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
+        return [
+            'success' => false,
+            'message' => 'No image data in Gemini response',
+            'response' => $result
+        ];
+    }
+
+    $base64Image = $result['candidates'][0]['content']['parts'][0]['inlineData']['data'];
+    $mimeType = $result['candidates'][0]['content']['parts'][0]['inlineData']['mimeType'] ?? 'image/png';
+
+    // Determine file extension from mime type
+    $extension = 'png';
+    if (strpos($mimeType, 'jpeg') !== false || strpos($mimeType, 'jpg') !== false) {
+        $extension = 'jpg';
+    }
+
+    // Save image to uploads directory
+    $uploadsDir = __DIR__ . '/../uploads/characters';
+    if (!is_dir($uploadsDir)) {
+        mkdir($uploadsDir, 0755, true);
+    }
+
+    $filename = 'char_' . $character['id'] . '_' . time() . '.' . $extension;
+    $filepath = $uploadsDir . '/' . $filename;
+
+    // Decode and save
+    $imageData = base64_decode($base64Image);
+    if (file_put_contents($filepath, $imageData) === false) {
+        return ['success' => false, 'message' => 'Failed to save image file'];
+    }
+
+    // Add to database
+    $relativePath = 'uploads/characters/' . $filename;
+    $imageResult = addCharacterImage($character['id'], $relativePath, $prompt);
+
+    if (!$imageResult['success']) {
+        // Clean up file if database insert failed
+        unlink($filepath);
+        return $imageResult;
+    }
+
+    return [
+        'success' => true,
+        'image_id' => $imageResult['image_id'],
+        'file_path' => $relativePath,
+        'prompt' => $prompt
+    ];
+}
 ?>

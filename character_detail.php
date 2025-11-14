@@ -69,7 +69,7 @@ $stats = getCharacterStats($characterId);
                     </div>
                 <?php endif; ?>
                 <div class="image-actions">
-                    <button class="btn btn-sm" onclick="alert('Image generation coming soon!')">🎨 Generate Image</button>
+                    <button class="btn btn-sm" id="generateImageBtn" onclick="generateImage()">🎨 Generate Image</button>
                     <button class="btn btn-sm" onclick="alert('Image upload coming soon!')">📤 Upload Image</button>
                 </div>
                 <?php if ($character['ai_generated']): ?>
@@ -194,10 +194,13 @@ $stats = getCharacterStats($characterId);
                     <div class="empty-icon">🖼️</div>
                     <h3>No Images Yet</h3>
                     <p>Generate or upload images to visualize this character.</p>
-                    <button class="btn btn-primary" onclick="alert('Image generation coming soon!')">Generate Image with AI</button>
+                    <button class="btn btn-primary" onclick="generateImage()">Generate Image with AI</button>
                 </div>
             <?php else: ?>
-                <div class="images-grid">
+                <div style="margin-bottom: 20px;">
+                    <button class="btn btn-primary" onclick="generateImage()">🎨 Generate Another Image</button>
+                </div>
+                <div class="images-grid" id="imagesGrid">
                     <?php foreach ($images as $image): ?>
                         <div class="image-item <?php echo $image['is_primary'] ? 'primary' : ''; ?>">
                             <img src="<?php echo h($image['file_path']); ?>" alt="<?php echo h($character['name']); ?>">
