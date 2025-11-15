@@ -11,10 +11,17 @@ const itemId = new URLSearchParams(window.location.search).get('item');
 let autoSaveTimer;
 let hasUnsavedChanges = false;
 
+// Dictation state
+let dictationRecognition = null;
+let dictationIsListening = false;
+let dictationActiveTarget = null;
+let dictationActiveButton = null;
+
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
     initializeEditor();
     initializeTreeToggles();
+    initializeDictation();
 });
 
 // Editor initialization and auto-save
@@ -150,6 +157,198 @@ function expandAll() {
 function collapseAll() {
     document.querySelectorAll('.tree-toggle.expanded').forEach(toggle => {
         toggleTreeItem(toggle);
+    });
+}
+
+// Dictation module
+function initializeDictation() {
+    const dictationButtons = document.querySelectorAll('.dictation-btn');
+    const statusElement = document.getElementById('dictationStatus');
+
+    if (!dictationButtons.length) {
+        return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+        dictationButtons.forEach(button => {
+            button.disabled = true;
+            button.classList.add('disabled');
+            button.setAttribute('title', 'Dictation is not supported in this browser.');
+        });
+
+        if (statusElement) {
+            statusElement.textContent = 'Dictation is not available in this browser.';
+        }
+        return;
+    }
+
+    dictationRecognition = new SpeechRecognition();
+    dictationRecognition.continuous = true;
+    dictationRecognition.interimResults = true;
+    dictationRecognition.lang = document.documentElement.lang || 'en-US';
+
+    dictationRecognition.addEventListener('result', handleDictationResult);
+    dictationRecognition.addEventListener('start', () => {
+        updateDictationStatus('Listening…');
+    });
+
+    dictationRecognition.addEventListener('error', event => {
+        console.error('Dictation error:', event.error);
+        updateDictationStatus('Voice error. Please try again.');
+        stopDictation(true);
+    });
+
+    dictationRecognition.addEventListener('end', () => {
+        if (dictationIsListening) {
+            // Recognition can end automatically; restart if we're still active
+            try {
+                dictationRecognition.start();
+            } catch (err) {
+                console.error('Failed to restart dictation:', err);
+                stopDictation(true);
+            }
+        } else {
+            updateDictationStatus('Voice ready');
+            toggleActiveDictationButton(null);
+        }
+    });
+
+    dictationButtons.forEach(button => {
+        button.addEventListener('click', () => toggleDictation(button));
+    });
+}
+
+function toggleDictation(button) {
+    if (!dictationRecognition) {
+        return;
+    }
+
+    const targetId = button.getAttribute('data-target');
+    if (!targetId) {
+        return;
+    }
+
+    if (dictationIsListening && dictationActiveButton === button) {
+        dictationIsListening = false;
+        dictationActiveTarget = null;
+        dictationActiveButton = null;
+        updateDictationStatus('Voice ready');
+        toggleActiveDictationButton(null);
+        try {
+            dictationRecognition.stop();
+        } catch (err) {
+            console.error('Failed to stop dictation:', err);
+        }
+        return;
+    }
+
+    dictationActiveTarget = targetId;
+    dictationActiveButton = button;
+    dictationIsListening = true;
+    toggleActiveDictationButton(button);
+    updateDictationStatus('Listening…');
+
+    try {
+        dictationRecognition.start();
+    } catch (err) {
+        // Calling start twice throws an error; ignore if we're already listening
+        if (err.name !== 'InvalidStateError') {
+            console.error('Failed to start dictation:', err);
+            updateDictationStatus('Unable to start dictation.');
+        }
+    }
+}
+
+function stopDictation(force = false) {
+    dictationIsListening = false;
+    if (force) {
+        dictationActiveTarget = null;
+        dictationActiveButton = null;
+        toggleActiveDictationButton(null);
+    }
+
+    if (dictationRecognition) {
+        try {
+            dictationRecognition.stop();
+        } catch (err) {
+            console.error('Failed to stop dictation:', err);
+        }
+    }
+}
+
+function handleDictationResult(event) {
+    if (!dictationActiveTarget) {
+        return;
+    }
+
+    const field = document.getElementById(dictationActiveTarget);
+    if (!field) {
+        return;
+    }
+
+    let finalTranscript = '';
+    let interimTranscript = '';
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+            finalTranscript += result[0].transcript;
+        } else {
+            interimTranscript += result[0].transcript;
+        }
+    }
+
+    if (interimTranscript && dictationIsListening) {
+        const trimmed = interimTranscript.trim();
+        const snippet = trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
+        updateDictationStatus(`Listening… ${snippet}`);
+    } else if (dictationIsListening) {
+        updateDictationStatus('Listening…');
+    }
+
+    if (finalTranscript) {
+        insertDictationText(field, finalTranscript);
+    }
+}
+
+function insertDictationText(field, transcript) {
+    const cleanTranscript = transcript.trim();
+    if (!cleanTranscript) {
+        return;
+    }
+
+    const selectionStart = typeof field.selectionStart === 'number' ? field.selectionStart : field.value.length;
+    const selectionEnd = typeof field.selectionEnd === 'number' ? field.selectionEnd : field.value.length;
+
+    const before = field.value.slice(0, selectionStart);
+    const after = field.value.slice(selectionEnd);
+
+    const needsLeadingSpace = before && !/\s$/.test(before);
+    const insertion = `${needsLeadingSpace ? ' ' : ''}${cleanTranscript}`;
+
+    const newValue = before + insertion + after;
+    const newCursorPosition = before.length + insertion.length;
+
+    field.value = newValue;
+    if (typeof field.setSelectionRange === 'function') {
+        field.setSelectionRange(newCursorPosition, newCursorPosition);
+    }
+    field.focus();
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function updateDictationStatus(message) {
+    const statusElement = document.getElementById('dictationStatus');
+    if (statusElement) {
+        statusElement.textContent = message;
+    }
+}
+
+function toggleActiveDictationButton(activeButton) {
+    document.querySelectorAll('.dictation-btn').forEach(button => {
+        button.classList.toggle('recording', button === activeButton);
     });
 }
 
