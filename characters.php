@@ -133,8 +133,18 @@ $characters = getCharacters($bookId);
         </div>
 
         <div class="ai-chat-input-area">
-            <textarea id="aiChatInput" placeholder="Discuss your characters..." rows="3"></textarea>
-            <button class="btn btn-primary" onclick="sendAIMessage()">Send</button>
+            <div class="ai-chat-tools">
+                <button type="button" class="btn btn-sm dictation-btn" data-target="aiChatInput" data-status-target="aiDictationStatus" data-status-idle="Tap the mic to speak">🎙️ Dictate</button>
+                <button type="button" class="btn btn-sm ai-voice-toggle" id="aiVoiceToggle" aria-pressed="false">
+                    <span class="icon" aria-hidden="true">🔈</span>
+                    <span class="label">Voice replies off</span>
+                </button>
+                <div class="ai-dictation-status" id="aiDictationStatus" data-default-text="Tap the mic to speak">Tap the mic to speak</div>
+            </div>
+            <div class="ai-chat-input-row">
+                <textarea id="aiChatInput" placeholder="Discuss your characters..." rows="3"></textarea>
+                <button type="button" class="btn btn-primary" onclick="sendAIMessage()">Send</button>
+            </div>
         </div>
     </aside>
 

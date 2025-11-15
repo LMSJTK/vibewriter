@@ -17,11 +17,15 @@ let dictationIsListening = false;
 let dictationActiveTarget = null;
 let dictationActiveButton = null;
 
+let aiVoiceEnabled = false;
+let aiVoiceUtterance = null;
+
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
     initializeEditor();
     initializeTreeToggles();
     initializeDictation();
+    initializeAIChatVoice();
 });
 
 // Editor initialization and auto-save
@@ -163,11 +167,14 @@ function collapseAll() {
 // Dictation module
 function initializeDictation() {
     const dictationButtons = document.querySelectorAll('.dictation-btn');
-    const statusElement = document.getElementById('dictationStatus');
 
     if (!dictationButtons.length) {
         return;
     }
+
+    dictationButtons.forEach(button => {
+        resetDictationStatus(button);
+    });
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -176,11 +183,8 @@ function initializeDictation() {
             button.disabled = true;
             button.classList.add('disabled');
             button.setAttribute('title', 'Dictation is not supported in this browser.');
+            updateDictationStatus('Dictation is not available in this browser.', button);
         });
-
-        if (statusElement) {
-            statusElement.textContent = 'Dictation is not available in this browser.';
-        }
         return;
     }
 
@@ -207,10 +211,10 @@ function initializeDictation() {
                 dictationRecognition.start();
             } catch (err) {
                 console.error('Failed to restart dictation:', err);
-                stopDictation(true);
+                updateDictationStatus('Voice ready');
+                stopDictation(true, true);
             }
         } else {
-            updateDictationStatus('Voice ready');
             toggleActiveDictationButton(null);
         }
     });
@@ -233,8 +237,9 @@ function toggleDictation(button) {
     if (dictationIsListening && dictationActiveButton === button) {
         dictationIsListening = false;
         dictationActiveTarget = null;
+        const previousButton = dictationActiveButton;
         dictationActiveButton = null;
-        updateDictationStatus('Voice ready');
+        resetDictationStatus(previousButton);
         toggleActiveDictationButton(null);
         try {
             dictationRecognition.stop();
@@ -244,11 +249,15 @@ function toggleDictation(button) {
         return;
     }
 
+    if (dictationActiveButton && dictationActiveButton !== button) {
+        resetDictationStatus(dictationActiveButton);
+    }
+
     dictationActiveTarget = targetId;
     dictationActiveButton = button;
     dictationIsListening = true;
     toggleActiveDictationButton(button);
-    updateDictationStatus('Listening…');
+    updateDictationStatus('Listening…', button);
 
     try {
         dictationRecognition.start();
@@ -256,12 +265,13 @@ function toggleDictation(button) {
         // Calling start twice throws an error; ignore if we're already listening
         if (err.name !== 'InvalidStateError') {
             console.error('Failed to start dictation:', err);
-            updateDictationStatus('Unable to start dictation.');
+            updateDictationStatus('Unable to start dictation.', button);
         }
     }
 }
 
-function stopDictation(force = false) {
+function stopDictation(force = false, resetStatus = false) {
+    const previousButton = dictationActiveButton;
     dictationIsListening = false;
     if (force) {
         dictationActiveTarget = null;
@@ -275,6 +285,10 @@ function stopDictation(force = false) {
         } catch (err) {
             console.error('Failed to stop dictation:', err);
         }
+    }
+
+    if (resetStatus && previousButton) {
+        resetDictationStatus(previousButton);
     }
 }
 
@@ -339,17 +353,150 @@ function insertDictationText(field, transcript) {
     field.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function updateDictationStatus(message) {
-    const statusElement = document.getElementById('dictationStatus');
+function updateDictationStatus(message, targetButton = dictationActiveButton) {
+    const statusElement = resolveDictationStatusElement(targetButton);
     if (statusElement) {
         statusElement.textContent = message;
     }
+}
+
+function resetDictationStatus(button) {
+    const statusElement = resolveDictationStatusElement(button);
+    if (statusElement) {
+        const idleMessage = (button && button.getAttribute('data-status-idle')) || statusElement.getAttribute('data-default-text') || '';
+        statusElement.textContent = idleMessage;
+    }
+}
+
+function resolveDictationStatusElement(button) {
+    if (button) {
+        const statusTarget = button.getAttribute('data-status-target');
+        if (statusTarget) {
+            const elementById = document.getElementById(statusTarget);
+            if (elementById) {
+                return elementById;
+            }
+        }
+
+        const statusSelector = button.getAttribute('data-status-selector');
+        if (statusSelector) {
+            const elementBySelector = document.querySelector(statusSelector);
+            if (elementBySelector) {
+                return elementBySelector;
+            }
+        }
+    }
+
+    return document.getElementById('dictationStatus');
 }
 
 function toggleActiveDictationButton(activeButton) {
     document.querySelectorAll('.dictation-btn').forEach(button => {
         button.classList.toggle('recording', button === activeButton);
     });
+}
+
+// AI chat voice playback
+function initializeAIChatVoice() {
+    const toggleButton = document.getElementById('aiVoiceToggle');
+    if (!toggleButton) {
+        return;
+    }
+
+    if (!('speechSynthesis' in window)) {
+        toggleButton.disabled = true;
+        toggleButton.classList.add('disabled');
+        toggleButton.setAttribute('title', 'Voice replies are not supported in this browser.');
+        toggleButton.setAttribute('aria-pressed', 'false');
+        const icon = toggleButton.querySelector('.icon');
+        if (icon) {
+            icon.textContent = '🔇';
+        }
+        const label = toggleButton.querySelector('.label');
+        if (label) {
+            label.textContent = 'Voice replies unavailable';
+        } else {
+            toggleButton.textContent = '🔇 Voice replies unavailable';
+        }
+        return;
+    }
+
+    updateAIVoiceToggleButton(toggleButton);
+
+    toggleButton.addEventListener('click', () => {
+        aiVoiceEnabled = !aiVoiceEnabled;
+        updateAIVoiceToggleButton(toggleButton);
+        if (!aiVoiceEnabled) {
+            cancelAIVoicePlayback();
+        }
+    });
+}
+
+function updateAIVoiceToggleButton(button) {
+    if (!button) {
+        return;
+    }
+
+    button.classList.toggle('active', aiVoiceEnabled);
+    button.setAttribute('aria-pressed', aiVoiceEnabled ? 'true' : 'false');
+
+    const icon = button.querySelector('.icon');
+    if (icon) {
+        icon.textContent = aiVoiceEnabled ? '🔊' : '🔈';
+    }
+
+    const label = button.querySelector('.label');
+    if (label) {
+        label.textContent = aiVoiceEnabled ? 'Voice replies on' : 'Voice replies off';
+    } else {
+        button.textContent = aiVoiceEnabled ? '🔊 Voice replies on' : '🔈 Voice replies off';
+    }
+}
+
+function speakAIResponse(message) {
+    if (!aiVoiceEnabled || !('speechSynthesis' in window)) {
+        return;
+    }
+
+    const plainText = getPlainTextForSpeech(message);
+    if (!plainText) {
+        return;
+    }
+
+    cancelAIVoicePlayback();
+
+    aiVoiceUtterance = new SpeechSynthesisUtterance(plainText);
+    aiVoiceUtterance.rate = 1;
+    aiVoiceUtterance.onend = () => {
+        aiVoiceUtterance = null;
+    };
+    aiVoiceUtterance.onerror = () => {
+        aiVoiceUtterance = null;
+    };
+
+    window.speechSynthesis.speak(aiVoiceUtterance);
+}
+
+function cancelAIVoicePlayback() {
+    if (!('speechSynthesis' in window)) {
+        return;
+    }
+
+    if (aiVoiceUtterance) {
+        window.speechSynthesis.cancel();
+        aiVoiceUtterance = null;
+    }
+}
+
+function getPlainTextForSpeech(message) {
+    if (!message) {
+        return '';
+    }
+
+    return String(message)
+        .replace(/\r?\n/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 // New item modal
@@ -598,6 +745,7 @@ function addAIMessage(message) {
     `;
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    speakAIResponse(message);
 }
 
 function addAITypingIndicator() {

@@ -103,10 +103,10 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
 
                 <div class="dictation-toolbar">
                     <div class="dictation-controls">
-                        <button class="btn btn-sm dictation-btn" data-target="synopsis">🎙️ Dictate Synopsis</button>
-                        <button class="btn btn-sm dictation-btn" data-target="contentEditor">🎙️ Dictate Content</button>
+                        <button type="button" class="btn btn-sm dictation-btn" data-target="synopsis" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Synopsis</button>
+                        <button type="button" class="btn btn-sm dictation-btn" data-target="contentEditor" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Content</button>
                     </div>
-                    <div class="dictation-status" id="dictationStatus">Voice ready</div>
+                    <div class="dictation-status" id="dictationStatus" data-default-text="Voice ready">Voice ready</div>
                 </div>
 
                 <div class="editor-section">
@@ -150,8 +150,18 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
             </div>
 
             <div class="ai-chat-input-area">
-                <textarea id="aiChatInput" placeholder="Ask me anything about your book..." rows="3"></textarea>
-                <button class="btn btn-primary" onclick="sendAIMessage()">Send</button>
+                <div class="ai-chat-tools">
+                    <button type="button" class="btn btn-sm dictation-btn" data-target="aiChatInput" data-status-target="aiDictationStatus" data-status-idle="Tap the mic to speak">🎙️ Dictate</button>
+                    <button type="button" class="btn btn-sm ai-voice-toggle" id="aiVoiceToggle" aria-pressed="false">
+                        <span class="icon" aria-hidden="true">🔈</span>
+                        <span class="label">Voice replies off</span>
+                    </button>
+                    <div class="ai-dictation-status" id="aiDictationStatus" data-default-text="Tap the mic to speak">Tap the mic to speak</div>
+                </div>
+                <div class="ai-chat-input-row">
+                    <textarea id="aiChatInput" placeholder="Ask me anything about your book..." rows="3"></textarea>
+                    <button type="button" class="btn btn-primary" onclick="sendAIMessage()">Send</button>
+                </div>
             </div>
         </aside>
     </div>
