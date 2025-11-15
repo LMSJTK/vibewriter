@@ -101,6 +101,14 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
                     <textarea class="synopsis-input" id="synopsis" placeholder="Brief summary of this section..."><?php echo h($currentItem['synopsis']); ?></textarea>
                 </div>
 
+                <div class="dictation-toolbar">
+                    <div class="dictation-controls">
+                        <button class="btn btn-sm dictation-btn" data-target="synopsis">🎙️ Dictate Synopsis</button>
+                        <button class="btn btn-sm dictation-btn" data-target="contentEditor">🎙️ Dictate Content</button>
+                    </div>
+                    <div class="dictation-status" id="dictationStatus">Voice ready</div>
+                </div>
+
                 <div class="editor-section">
                     <textarea class="content-editor" id="contentEditor" placeholder="Start writing..."><?php echo h($currentItem['content']); ?></textarea>
                 </div>

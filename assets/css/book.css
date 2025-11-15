@@ -240,6 +240,40 @@
     resize: none;
 }
 
+.dictation-toolbar {
+    padding: 10px 30px;
+    border-bottom: 1px solid var(--border-color);
+    background: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.dictation-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.dictation-toolbar .dictation-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dictation-toolbar .dictation-btn.recording {
+    background: linear-gradient(135deg, var(--danger-color) 0%, #ef476f 100%);
+    color: white;
+}
+
+.dictation-status {
+    font-size: 12px;
+    color: var(--gray);
+    flex: 1;
+    text-align: right;
+}
+
 .editor-section {
     flex: 1;
     padding: 30px;
