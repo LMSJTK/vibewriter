@@ -36,8 +36,20 @@ if (!$book) {
 unset($data['item_id']);
 unset($data['book_id']);
 
+$metadata = [];
+if (isset($data['metadata']) && is_array($data['metadata'])) {
+    $metadata = $data['metadata'];
+    unset($data['metadata']);
+}
+
 // Update the item
 $result = updateBookItem($itemId, $bookId, $data);
+
+if ($result['success'] && !empty($metadata)) {
+    foreach ($metadata as $key => $value) {
+        setItemMetadata($itemId, $key, $value);
+    }
+}
 
 jsonResponse($result);
 ?>

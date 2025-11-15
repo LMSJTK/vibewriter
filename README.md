@@ -17,11 +17,11 @@ VibeWriter is a comprehensive web-based application designed for authors who wan
 - **Status Tracking** - Mark items as "To Do", "In Progress", "Done", or "Revised"
 - **Snapshots/Version Control** - Create snapshots of your work before major revisions
 - **Synopsis Support** - Write brief summaries for each chapter/scene
+- **Planning Workspace** - Toggle between an editor, visual corkboard, and sortable outliner with drag-and-drop reordering that stays in sync with the binder
 
 ### 🚀 Upcoming Features
 
 - **Character Sheets** - Detailed character profiles with AI-generated descriptions and images
-- **Visual Outliner/Corkboard** - Drag-and-drop index cards for visual story planning
 - **Split-Screen Reference Mode** - View research materials while writing
 - **Metadata Tracking** - Custom fields like POV, Setting, Subplot for advanced organization
 - **Export Functionality** - Export to PDF, EPUB, DOCX, and other formats
@@ -122,6 +122,13 @@ Then update `config/database.php` with your credentials.
 - **Scenes**: Individual writing segments within chapters
 - **Notes**: Ideas, reminders, and planning documents
 - **Research**: Reference materials and background information
+
+### Planning Workspace (Corkboard & Outliner)
+
+1. Open a book and use the tabs above the editor to switch between **Editor**, **Corkboard**, and **Outliner** views.
+2. On the **Corkboard**, drag cards or use the keyboard handle (focus the ⋮⋮ button and press arrow keys) to reorder scenes. Drops are saved instantly and reflected in the binder.
+3. The **Outliner** lists the same items in a table. Click column headers to sort, edit titles or POV inline, and update status with the dropdown — changes auto-save via existing endpoints.
+4. Selecting a card or row updates the binder/editor selection so your writing, planning, and metadata always stay in sync.
 
 ### Version Control with Snapshots
 
@@ -257,9 +264,9 @@ define('IMAGE_API_KEY', 'your-image-api-key');
 - [ ] Character relationship mapping
 
 ### Phase 3: Visual Planning
-- [ ] Corkboard view with index cards
-- [ ] Outliner view with metadata columns
-- [ ] Drag-and-drop reorganization
+- [x] Corkboard view with index cards
+- [x] Outliner view with metadata columns
+- [x] Drag-and-drop reorganization
 - [ ] Timeline view
 - [ ] Story structure templates
 

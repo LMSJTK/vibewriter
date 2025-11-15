@@ -4,8 +4,41 @@
  */
 
 // Current book and item IDs
-const bookId = new URLSearchParams(window.location.search).get('id');
-const itemId = new URLSearchParams(window.location.search).get('item');
+const urlParams = new URLSearchParams(window.location.search);
+const bookId = urlParams.get('id');
+const itemId = urlParams.get('item');
+const numericItemId = itemId ? Number(itemId) : null;
+const initialWorkspaceView = urlParams.get('view') || 'editor';
+
+const PlanningUtils = window.PlanningUtils || {};
+const normalizePlanningItems = typeof PlanningUtils.normalizePlanningItems === 'function'
+    ? PlanningUtils.normalizePlanningItems
+    : () => ({ itemsById: {}, childrenByParent: {} });
+const getPlanningCollection = typeof PlanningUtils.getCollection === 'function'
+    ? PlanningUtils.getCollection
+    : () => [];
+const derivePlanningParent = typeof PlanningUtils.derivePlanningParent === 'function'
+    ? PlanningUtils.derivePlanningParent
+    : () => null;
+const planningParentKeyFor = typeof PlanningUtils.parentKeyFor === 'function'
+    ? PlanningUtils.parentKeyFor
+    : (parentId) => (parentId === null || parentId === undefined ? 'root' : String(parentId));
+
+let activeWorkspaceView = initialWorkspaceView;
+let planningStatusTimer = null;
+
+const planningState = {
+    ready: false,
+    itemsById: {},
+    childrenByParent: {},
+    selectedItemId: Number.isFinite(numericItemId) ? numericItemId : null,
+    activeParentId: null,
+    outlinerSort: { column: 'position', direction: 'asc' }
+};
+
+const planningDragState = {
+    activeId: null
+};
 
 // Auto-save timer
 let autoSaveTimer;
@@ -26,6 +59,31 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeTreeToggles();
     initializeDictation();
     initializeAIChatVoice();
+    initializeWorkspaceTabs();
+    initializeBinderSelectionSync();
+    initializeOutlinerInteractions();
+    initializePlanningViews();
+
+    if (Number.isFinite(planningState.selectedItemId)) {
+        document.dispatchEvent(new CustomEvent('book:itemSelected', {
+            detail: {
+                itemId: planningState.selectedItemId,
+                source: 'bootstrap',
+                view: initialWorkspaceView
+            }
+        }));
+    }
+});
+
+document.addEventListener('book:itemSelected', (event) => {
+    const detail = event?.detail || {};
+    const selectedId = Number(detail.itemId);
+    if (!Number.isFinite(selectedId)) {
+        return;
+    }
+
+    planningState.selectedItemId = selectedId;
+    updatePlanningSelection(selectedId);
 });
 
 // Editor initialization and auto-save
@@ -162,6 +220,972 @@ function collapseAll() {
     document.querySelectorAll('.tree-toggle.expanded').forEach(toggle => {
         toggleTreeItem(toggle);
     });
+}
+
+// Workspace tab management
+function initializeWorkspaceTabs() {
+    const tabs = document.querySelectorAll('.workspace-tab');
+    const hasTabs = tabs.length > 0;
+    if (!hasTabs) {
+        return;
+    }
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const view = tab.getAttribute('data-view');
+            activateWorkspaceTab(view);
+            tab.focus();
+        });
+
+        tab.addEventListener('keydown', handleWorkspaceTabKeydown);
+    });
+
+    activateWorkspaceTab(initialWorkspaceView, { updateHistory: false });
+}
+
+function activateWorkspaceTab(view, options = {}) {
+    const tabs = document.querySelectorAll('.workspace-tab');
+    const panels = document.querySelectorAll('.workspace-panel');
+    if (!tabs.length || !panels.length) {
+        return;
+    }
+
+    const validViews = Array.from(panels).map(panel => panel.getAttribute('data-view'));
+    const nextView = validViews.includes(view) ? view : 'editor';
+    activeWorkspaceView = nextView;
+
+    tabs.forEach(tab => {
+        const isActive = tab.getAttribute('data-view') === nextView;
+        tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        tab.classList.toggle('active', isActive);
+    });
+
+    panels.forEach(panel => {
+        const isActive = panel.getAttribute('data-view') === nextView;
+        panel.classList.toggle('active', isActive);
+        panel.toggleAttribute('hidden', !isActive);
+    });
+
+    if (options.updateHistory !== false) {
+        const url = new URL(window.location.href);
+        if (nextView === 'editor') {
+            url.searchParams.delete('view');
+        } else {
+            url.searchParams.set('view', nextView);
+        }
+        window.history.replaceState({}, '', url.toString());
+    }
+}
+
+function handleWorkspaceTabKeydown(event) {
+    const tabs = Array.from(document.querySelectorAll('.workspace-tab'));
+    if (!tabs.length) {
+        return;
+    }
+
+    const currentIndex = tabs.indexOf(event.currentTarget);
+    if (currentIndex === -1) {
+        return;
+    }
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        const nextIndex = (currentIndex + 1) % tabs.length;
+        tabs[nextIndex].click();
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+        tabs[prevIndex].click();
+    } else if (event.key === 'Home') {
+        event.preventDefault();
+        tabs[0].click();
+    } else if (event.key === 'End') {
+        event.preventDefault();
+        tabs[tabs.length - 1].click();
+    }
+}
+
+window.addEventListener('popstate', () => {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get('view') || 'editor';
+    activateWorkspaceTab(view, { updateHistory: false });
+});
+
+// Binder <-> planning sync helpers
+function initializeBinderSelectionSync() {
+    const binderTree = document.getElementById('binderTree');
+    if (!binderTree) {
+        return;
+    }
+
+    binderTree.addEventListener('click', (event) => {
+        const link = event.target.closest('a.tree-label');
+        if (!link) {
+            return;
+        }
+
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
+            return;
+        }
+
+        const targetUrl = new URL(link.href, window.location.origin);
+        const nextItemId = Number(targetUrl.searchParams.get('item'));
+        if (!Number.isFinite(nextItemId)) {
+            return;
+        }
+
+        event.preventDefault();
+        handleItemSelection(nextItemId, { source: 'binder' });
+    });
+}
+
+function handleItemSelection(nextItemId, options = {}) {
+    if (!Number.isFinite(nextItemId)) {
+        return;
+    }
+
+    const detail = {
+        itemId: nextItemId,
+        source: options.source || 'unknown',
+        view: options.view || null
+    };
+
+    planningState.selectedItemId = nextItemId;
+    document.dispatchEvent(new CustomEvent('book:itemSelected', { detail }));
+
+    if (options.navigation === false) {
+        return;
+    }
+
+    const targetUrl = new URL(window.location.href);
+    targetUrl.searchParams.set('item', nextItemId);
+    if (options.view) {
+        targetUrl.searchParams.set('view', options.view);
+    } else {
+        targetUrl.searchParams.delete('view');
+    }
+
+    window.location.assign(targetUrl.toString());
+}
+
+function syncBinderActiveState(selectedId) {
+    const nodes = document.querySelectorAll('#binderTree .tree-item');
+    nodes.forEach(node => {
+        const itemId = Number(node.getAttribute('data-item-id'));
+        const isActive = itemId === selectedId;
+        node.classList.toggle('active', isActive);
+        const link = node.querySelector('.tree-label');
+        if (link) {
+            link.setAttribute('aria-current', isActive ? 'page' : 'false');
+        }
+    });
+}
+
+function syncBinderOrder(parentId, newOrder) {
+    if (!Array.isArray(newOrder) || newOrder.length === 0) {
+        return;
+    }
+
+    let container;
+    if (parentId === null || parentId === undefined) {
+        container = document.querySelector('#binderTree > ul.tree-list');
+    } else {
+        container = document.querySelector(`#binderTree li[data-item-id="${parentId}"] > ul.tree-list`);
+    }
+
+    if (!container) {
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    newOrder.forEach(id => {
+        const child = container.querySelector(`:scope > li[data-item-id="${id}"]`);
+        if (child) {
+            fragment.appendChild(child);
+        }
+    });
+
+    container.appendChild(fragment);
+}
+
+function syncBinderLabel(itemId, newTitle) {
+    const node = document.querySelector(`#binderTree li[data-item-id="${itemId}"] .tree-label`);
+    if (node) {
+        node.textContent = newTitle || 'Untitled';
+    }
+}
+
+// Planning data bootstrap
+async function initializePlanningViews() {
+    if (!bookId) {
+        return;
+    }
+
+    const label = document.getElementById('corkboardCollectionLabel');
+    if (label) {
+        label.textContent = 'Loading corkboard…';
+    }
+
+    try {
+        const response = await fetch(`api/get_book_items.php?book_id=${encodeURIComponent(bookId)}`);
+        const payload = await response.json();
+
+        if (!payload.success) {
+            throw new Error(payload.message || 'Unable to load planning data');
+        }
+
+        const normalized = normalizePlanningItems(payload.items || []);
+        planningState.itemsById = normalized.itemsById;
+        planningState.childrenByParent = normalized.childrenByParent;
+        planningState.ready = true;
+        planningState.activeParentId = Number.isFinite(planningState.selectedItemId)
+            ? derivePlanningParent(planningState.itemsById, planningState.selectedItemId)
+            : null;
+
+        updateOutlinerSortButtons();
+        updatePlanningSelection(planningState.selectedItemId);
+        announcePlanningStatus('Planning views ready', 'success');
+    } catch (error) {
+        console.error('Failed to load planning data', error);
+        announcePlanningStatus(error.message || 'Failed to load planning data', 'error');
+    }
+}
+
+function updatePlanningSelection(itemId) {
+    if (!planningState.ready) {
+        planningState.selectedItemId = Number.isFinite(itemId) ? itemId : null;
+        return;
+    }
+
+    const selectedId = Number.isFinite(itemId) ? itemId : null;
+    planningState.selectedItemId = selectedId;
+    planningState.activeParentId = Number.isFinite(selectedId)
+        ? derivePlanningParent(planningState.itemsById, selectedId)
+        : null;
+
+    renderCorkboard();
+    renderOutliner();
+    togglePlanningEmptyStates();
+    updateCorkboardCollectionLabel();
+    syncBinderActiveState(selectedId);
+}
+
+function renderCorkboard() {
+    const grid = document.getElementById('corkboardGrid');
+    if (!grid) {
+        return;
+    }
+
+    if (!planningState.ready) {
+        grid.setAttribute('aria-busy', 'true');
+        grid.innerHTML = '';
+        return;
+    }
+
+    grid.removeAttribute('aria-busy');
+    ensureCorkboardGridListeners(grid);
+    const parentId = planningState.activeParentId ?? null;
+    grid.dataset.parentId = parentId === null ? '' : parentId;
+    const order = getPlanningCollection(planningState.childrenByParent, parentId);
+    grid.innerHTML = '';
+
+    if (!order.length) {
+        return;
+    }
+
+    order.forEach(itemId => {
+        const item = planningState.itemsById[itemId];
+        if (!item) {
+            return;
+        }
+
+        const card = document.createElement('article');
+        card.className = 'corkboard-card';
+        card.dataset.itemId = item.id;
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.draggable = true;
+
+        if (item.id === planningState.selectedItemId) {
+            card.classList.add('is-selected');
+        }
+
+        card.addEventListener('click', (event) => {
+            if (event.target.closest('.card-drag-handle')) {
+                return;
+            }
+            handleItemSelection(item.id, { source: 'corkboard', view: activeWorkspaceView });
+        });
+
+        card.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleItemSelection(item.id, { source: 'corkboard', view: activeWorkspaceView });
+            }
+        });
+
+        card.addEventListener('dragstart', handleCardDragStart);
+        card.addEventListener('dragover', handleCardDragOver);
+        card.addEventListener('dragleave', handleCardDragLeave);
+        card.addEventListener('drop', handleCardDrop);
+        card.addEventListener('dragend', handleCardDragEnd);
+
+        const header = document.createElement('div');
+        header.className = 'card-header';
+
+        const title = document.createElement('h4');
+        title.className = 'card-title';
+        title.textContent = item.title || 'Untitled';
+        header.appendChild(title);
+
+        const dragHandle = document.createElement('button');
+        dragHandle.type = 'button';
+        dragHandle.className = 'card-drag-handle';
+        dragHandle.setAttribute('aria-label', `Reorder ${item.title || 'card'}`);
+        dragHandle.innerHTML = '⋮⋮';
+        dragHandle.addEventListener('click', (event) => event.stopPropagation());
+        dragHandle.addEventListener('keydown', (event) => {
+            handleKeyboardReorder(event, item.id, parentId);
+        });
+        header.appendChild(dragHandle);
+
+        card.appendChild(header);
+
+        const meta = document.createElement('div');
+        meta.className = 'card-meta';
+
+        if (item.status) {
+            const statusPill = document.createElement('span');
+            statusPill.className = 'card-label';
+            statusPill.textContent = formatStatus(item.status);
+            meta.appendChild(statusPill);
+        }
+
+        if (item.label) {
+            const labelPill = document.createElement('span');
+            labelPill.className = 'card-label';
+            labelPill.textContent = item.label;
+            meta.appendChild(labelPill);
+        }
+
+        const pov = item.metadata && typeof item.metadata === 'object' ? item.metadata.pov : '';
+        if (pov) {
+            const povPill = document.createElement('span');
+            povPill.className = 'card-label';
+            povPill.textContent = `POV: ${pov}`;
+            meta.appendChild(povPill);
+        }
+
+        if (meta.childNodes.length) {
+            card.appendChild(meta);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'card-body';
+        const synopsis = (item.synopsis || '').trim();
+        if (synopsis) {
+            body.textContent = synopsis;
+        } else {
+            const placeholder = document.createElement('span');
+            placeholder.className = 'empty';
+            placeholder.textContent = 'No synopsis yet';
+            body.appendChild(placeholder);
+        }
+        card.appendChild(body);
+
+        const footer = document.createElement('div');
+        footer.className = 'card-footer';
+        footer.innerHTML = `<span>${formatItemType(item.item_type)}</span><span>${formatWordCount(item.word_count)}</span>`;
+        card.appendChild(footer);
+
+        grid.appendChild(card);
+    });
+}
+
+function ensureCorkboardGridListeners(grid) {
+    if (!grid || grid.dataset.listenersBound === 'true') {
+        return;
+    }
+
+    grid.addEventListener('dragover', handleCorkboardGridDragOver);
+    grid.addEventListener('drop', handleCorkboardGridDrop);
+    grid.dataset.listenersBound = 'true';
+}
+
+function initializeOutlinerInteractions() {
+    const sortButtons = document.querySelectorAll('.outliner-sort');
+    if (!sortButtons.length) {
+        return;
+    }
+
+    sortButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const column = button.getAttribute('data-sort');
+            if (!column) {
+                return;
+            }
+
+            if (planningState.outlinerSort.column === column) {
+                planningState.outlinerSort.direction = planningState.outlinerSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                planningState.outlinerSort.column = column;
+                planningState.outlinerSort.direction = column === 'word_count' ? 'desc' : 'asc';
+            }
+
+            updateOutlinerSortButtons();
+            renderOutliner();
+        });
+    });
+
+    updateOutlinerSortButtons();
+}
+
+function updateOutlinerSortButtons() {
+    const sortButtons = document.querySelectorAll('.outliner-sort');
+    sortButtons.forEach(button => {
+        const column = button.getAttribute('data-sort');
+        if (column === planningState.outlinerSort.column) {
+            button.dataset.direction = planningState.outlinerSort.direction;
+        } else {
+            delete button.dataset.direction;
+        }
+    });
+}
+
+function renderOutliner() {
+    const tbody = document.getElementById('outlinerTableBody');
+    if (!tbody) {
+        return;
+    }
+
+    tbody.innerHTML = '';
+    if (!planningState.ready) {
+        return;
+    }
+
+    const parentId = planningState.activeParentId ?? null;
+    let order = getPlanningCollection(planningState.childrenByParent, parentId);
+    if (!order.length) {
+        return;
+    }
+
+    const sortConfig = planningState.outlinerSort || { column: 'position', direction: 'asc' };
+    if (sortConfig.column === 'position') {
+        if (sortConfig.direction === 'desc') {
+            order = order.slice().reverse();
+        }
+    } else {
+        order = applyOutlinerSort(order, sortConfig);
+    }
+
+    order.forEach(itemId => {
+        const item = planningState.itemsById[itemId];
+        if (!item) {
+            return;
+        }
+
+        const row = document.createElement('tr');
+        row.dataset.itemId = item.id;
+        if (item.id === planningState.selectedItemId) {
+            row.classList.add('is-selected');
+        }
+
+        row.addEventListener('click', (event) => {
+            if (event.target.closest('[contenteditable]') || event.target.closest('select')) {
+                return;
+            }
+            handleItemSelection(item.id, { source: 'outliner', view: activeWorkspaceView });
+        });
+
+        const titleCell = document.createElement('td');
+        titleCell.className = 'outliner-cell--editable';
+        titleCell.contentEditable = 'true';
+        titleCell.setAttribute('role', 'textbox');
+        titleCell.setAttribute('aria-label', `Edit title for ${item.title || 'item'}`);
+        titleCell.dataset.originalValue = item.title || '';
+        titleCell.textContent = item.title || '';
+        titleCell.addEventListener('keydown', handleEditableKeydown);
+        titleCell.addEventListener('focus', () => {
+            titleCell.dataset.originalValue = item.title || '';
+        });
+        titleCell.addEventListener('blur', () => {
+            handleOutlinerEdit(item.id, 'title', titleCell.textContent || '');
+        });
+        row.appendChild(titleCell);
+
+        const typeCell = document.createElement('td');
+        typeCell.textContent = formatItemType(item.item_type);
+        row.appendChild(typeCell);
+
+        const statusCell = document.createElement('td');
+        const statusSelect = document.createElement('select');
+        statusSelect.className = 'outliner-status';
+        statusSelect.setAttribute('aria-label', `Set status for ${item.title || 'item'}`);
+        ['to_do', 'in_progress', 'done', 'revised'].forEach(value => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = formatStatus(value);
+            if (value === item.status) {
+                option.selected = true;
+            }
+            statusSelect.appendChild(option);
+        });
+        statusSelect.addEventListener('change', () => {
+            handleOutlinerStatusChange(item.id, statusSelect.value, statusSelect);
+        });
+        statusSelect.addEventListener('click', (event) => event.stopPropagation());
+        statusCell.appendChild(statusSelect);
+        row.appendChild(statusCell);
+
+        const povCell = document.createElement('td');
+        povCell.className = 'outliner-cell--editable';
+        povCell.contentEditable = 'true';
+        povCell.setAttribute('role', 'textbox');
+        povCell.setAttribute('aria-label', `Edit POV for ${item.title || 'item'}`);
+        const currentPov = item.metadata && typeof item.metadata === 'object' ? (item.metadata.pov || '') : '';
+        povCell.dataset.originalValue = currentPov;
+        povCell.textContent = currentPov;
+        povCell.addEventListener('keydown', handleEditableKeydown);
+        povCell.addEventListener('focus', () => {
+            povCell.dataset.originalValue = item.metadata?.pov || '';
+        });
+        povCell.addEventListener('blur', () => {
+            handleOutlinerEdit(item.id, 'pov', povCell.textContent || '');
+        });
+        row.appendChild(povCell);
+
+        const wordCell = document.createElement('td');
+        wordCell.textContent = formatWordCount(item.word_count);
+        row.appendChild(wordCell);
+
+        tbody.appendChild(row);
+    });
+}
+
+function applyOutlinerSort(order, sortConfig) {
+    const items = order
+        .map(id => planningState.itemsById[id])
+        .filter(Boolean);
+
+    const direction = sortConfig.direction === 'desc' ? -1 : 1;
+    items.sort((a, b) => {
+        const valueA = getOutlinerSortValue(a, sortConfig.column);
+        const valueB = getOutlinerSortValue(b, sortConfig.column);
+
+        if (valueA < valueB) return -1 * direction;
+        if (valueA > valueB) return 1 * direction;
+        return (a.position || 0) - (b.position || 0);
+    });
+
+    return items.map(item => item.id);
+}
+
+function getOutlinerSortValue(item, column) {
+    switch (column) {
+        case 'title':
+            return (item.title || '').toLowerCase();
+        case 'item_type':
+            return (item.item_type || '').toLowerCase();
+        case 'status':
+            return (item.status || '').toLowerCase();
+        case 'pov':
+            return (item.metadata && typeof item.metadata === 'object' ? (item.metadata.pov || '') : '').toLowerCase();
+        case 'word_count':
+            return Number(item.word_count) || 0;
+        default:
+            return Number(item.position) || 0;
+    }
+}
+
+function togglePlanningEmptyStates() {
+    if (!planningState.ready) {
+        return;
+    }
+
+    const parentId = planningState.activeParentId ?? null;
+    const order = getPlanningCollection(planningState.childrenByParent, parentId);
+    const hasItems = order.length > 0;
+
+    const corkboardEmpty = document.getElementById('corkboardEmpty');
+    if (corkboardEmpty) {
+        corkboardEmpty.hidden = hasItems;
+    }
+
+    const outlinerEmpty = document.getElementById('outlinerEmpty');
+    if (outlinerEmpty) {
+        outlinerEmpty.hidden = hasItems;
+    }
+
+    const corkboardOnboarding = document.getElementById('corkboardOnboarding');
+    if (corkboardOnboarding) {
+        corkboardOnboarding.hidden = hasItems;
+    }
+
+    const outlinerOnboarding = document.getElementById('outlinerOnboarding');
+    if (outlinerOnboarding) {
+        outlinerOnboarding.hidden = hasItems;
+    }
+}
+
+function updateCorkboardCollectionLabel() {
+    const label = document.getElementById('corkboardCollectionLabel');
+    if (!label) {
+        return;
+    }
+
+    if (!planningState.ready) {
+        label.textContent = 'Loading corkboard…';
+        return;
+    }
+
+    const parentId = planningState.activeParentId;
+    if (parentId === null || parentId === undefined) {
+        label.textContent = 'Top-level chapters and scenes';
+        return;
+    }
+
+    const parentItem = planningState.itemsById[parentId];
+    if (parentItem) {
+        label.textContent = `Children of ${parentItem.title || 'binder item'}`;
+    } else {
+        label.textContent = 'Scenes and chapters';
+    }
+}
+
+function announcePlanningStatus(message, type = 'info') {
+    const status = document.getElementById('planningStatus');
+    if (!status) {
+        return;
+    }
+
+    status.textContent = message || '';
+    status.classList.remove('success', 'error');
+    if (type === 'success') {
+        status.classList.add('success');
+    } else if (type === 'error') {
+        status.classList.add('error');
+    }
+
+    if (planningStatusTimer) {
+        clearTimeout(planningStatusTimer);
+    }
+
+    if (message) {
+        planningStatusTimer = setTimeout(() => {
+            status.textContent = '';
+            status.classList.remove('success', 'error');
+        }, 4000);
+    }
+}
+
+async function persistPlanningOrder(parentId, order, announceMessage) {
+    if (!bookId || !Array.isArray(order)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('api/reorder_items.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                book_id: bookId,
+                parent_id: parentId,
+                item_ids: order
+            })
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.message || 'Unable to save new order');
+        }
+
+        if (announceMessage) {
+            announcePlanningStatus(announceMessage, 'success');
+        }
+    } catch (error) {
+        console.error('Failed to reorder items', error);
+        announcePlanningStatus(error.message || 'Failed to reorder items', 'error');
+    }
+}
+
+function applyNewOrder(parentId, newOrder, options = {}) {
+    if (!Array.isArray(newOrder)) {
+        return;
+    }
+
+    const key = planningParentKeyFor(parentId);
+    planningState.childrenByParent[key] = newOrder.slice();
+    newOrder.forEach((itemId, index) => {
+        const item = planningState.itemsById[itemId];
+        if (item) {
+            item.position = index;
+            item.parent_id = parentId;
+        }
+    });
+
+    planningState.activeParentId = parentId ?? null;
+    renderCorkboard();
+    renderOutliner();
+    syncBinderOrder(parentId ?? null, newOrder);
+    persistPlanningOrder(parentId ?? null, newOrder, options.announce);
+}
+
+function computeReorderedOrder(order, draggedId, targetId) {
+    const filtered = order.filter(id => id !== draggedId);
+    if (targetId === undefined || targetId === null) {
+        filtered.push(draggedId);
+        return filtered;
+    }
+
+    const index = filtered.indexOf(targetId);
+    if (index === -1) {
+        filtered.push(draggedId);
+        return filtered;
+    }
+
+    filtered.splice(index, 0, draggedId);
+    return filtered;
+}
+
+function handleCardDragStart(event) {
+    const card = event.currentTarget;
+    const itemId = Number(card.getAttribute('data-item-id'));
+    if (!Number.isFinite(itemId)) {
+        return;
+    }
+
+    planningDragState.activeId = itemId;
+    card.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(itemId));
+}
+
+function handleCardDragOver(event) {
+    event.preventDefault();
+    const card = event.currentTarget;
+    card.classList.add('drop-target');
+}
+
+function handleCardDragLeave(event) {
+    const card = event.currentTarget;
+    card.classList.remove('drop-target');
+}
+
+function handleCardDrop(event) {
+    event.preventDefault();
+    const targetCard = event.currentTarget;
+    targetCard.classList.remove('drop-target');
+
+    const targetId = Number(targetCard.getAttribute('data-item-id'));
+    const draggedId = planningDragState.activeId ?? Number(event.dataTransfer.getData('text/plain'));
+    if (!Number.isFinite(draggedId) || draggedId === targetId) {
+        return;
+    }
+
+    const parentId = planningState.activeParentId ?? null;
+    const order = getPlanningCollection(planningState.childrenByParent, parentId);
+    const nextOrder = computeReorderedOrder(order, draggedId, targetId);
+    applyNewOrder(parentId, nextOrder, { announce: 'Corkboard order updated' });
+}
+
+function handleCardDragEnd(event) {
+    planningDragState.activeId = null;
+    event.currentTarget.classList.remove('is-dragging');
+    document.querySelectorAll('.corkboard-card.drop-target').forEach(card => card.classList.remove('drop-target'));
+}
+
+function handleCorkboardGridDragOver(event) {
+    event.preventDefault();
+}
+
+function handleCorkboardGridDrop(event) {
+    event.preventDefault();
+    const draggedId = planningDragState.activeId ?? Number(event.dataTransfer.getData('text/plain'));
+    if (!Number.isFinite(draggedId)) {
+        return;
+    }
+
+    const parentId = planningState.activeParentId ?? null;
+    const order = getPlanningCollection(planningState.childrenByParent, parentId);
+    const nextOrder = computeReorderedOrder(order, draggedId, null);
+    applyNewOrder(parentId, nextOrder, { announce: 'Card moved to end' });
+}
+
+function handleKeyboardReorder(event, itemId, parentId) {
+    const key = event.key;
+    if (!['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'PageUp', 'PageDown'].includes(key)) {
+        return;
+    }
+
+    event.preventDefault();
+    const order = getPlanningCollection(planningState.childrenByParent, parentId);
+    const currentIndex = order.indexOf(itemId);
+    if (currentIndex === -1) {
+        return;
+    }
+
+    let delta = 0;
+    if (key === 'ArrowLeft' || key === 'ArrowUp') delta = -1;
+    if (key === 'ArrowRight' || key === 'ArrowDown') delta = 1;
+    if (key === 'PageUp') delta = -3;
+    if (key === 'PageDown') delta = 3;
+
+    let nextIndex = currentIndex + delta;
+    nextIndex = Math.max(0, Math.min(order.length - 1, nextIndex));
+    if (nextIndex === currentIndex) {
+        return;
+    }
+
+    const updated = order.slice();
+    updated.splice(currentIndex, 1);
+    updated.splice(nextIndex, 0, itemId);
+    applyNewOrder(parentId, updated, { announce: 'Card reordered via keyboard' });
+
+    requestAnimationFrame(() => {
+        const handle = document.querySelector(`.corkboard-card[data-item-id="${itemId}"] .card-drag-handle`);
+        if (handle) {
+            handle.focus();
+        }
+    });
+}
+
+function handleOutlinerEdit(itemId, field, value) {
+    const item = planningState.itemsById[itemId];
+    if (!item) {
+        return;
+    }
+
+    if (field === 'title') {
+        const nextTitle = (value || '').trim();
+        if (!nextTitle || nextTitle === item.title) {
+            return;
+        }
+
+        const previous = item.title;
+        item.title = nextTitle;
+        syncBinderLabel(itemId, nextTitle);
+        renderCorkboard();
+
+        updateItemFields(itemId, { title: nextTitle }).then(success => {
+            if (!success) {
+                item.title = previous;
+                syncBinderLabel(itemId, previous);
+                renderCorkboard();
+                renderOutliner();
+            }
+        });
+    } else if (field === 'pov') {
+        const nextPov = (value || '').trim();
+        const previous = item.metadata && typeof item.metadata === 'object' ? (item.metadata.pov || '') : '';
+        if (nextPov === previous) {
+            return;
+        }
+
+        if (!item.metadata || typeof item.metadata !== 'object') {
+            item.metadata = {};
+        }
+        item.metadata.pov = nextPov;
+        renderCorkboard();
+
+        updateItemFields(itemId, { metadata: { pov: nextPov } }).then(success => {
+            if (!success) {
+                item.metadata.pov = previous;
+                renderCorkboard();
+                renderOutliner();
+            }
+        });
+    }
+}
+
+function handleOutlinerStatusChange(itemId, nextStatus, selectElement) {
+    const item = planningState.itemsById[itemId];
+    if (!item || nextStatus === item.status) {
+        return;
+    }
+
+    const previous = item.status;
+    item.status = nextStatus;
+    renderCorkboard();
+
+    updateItemFields(itemId, { status: nextStatus }).then(success => {
+        if (!success) {
+            item.status = previous;
+            selectElement.value = previous;
+            renderCorkboard();
+        }
+    });
+}
+
+function handleEditableKeydown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        event.currentTarget.blur();
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        const original = event.currentTarget.getAttribute('data-original-value') || '';
+        event.currentTarget.textContent = original;
+        event.currentTarget.blur();
+    }
+}
+
+async function updateItemFields(itemId, payload) {
+    if (!bookId) {
+        return false;
+    }
+
+    try {
+        const response = await fetch('api/update_item.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(Object.assign({
+                item_id: itemId,
+                book_id: bookId
+            }, payload))
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.message || 'Update failed');
+        }
+
+        announcePlanningStatus('Changes saved', 'success');
+        return true;
+    } catch (error) {
+        console.error('Failed to update item metadata', error);
+        announcePlanningStatus(error.message || 'Failed to save changes', 'error');
+        return false;
+    }
+}
+
+function formatStatus(status) {
+    switch (status) {
+        case 'in_progress':
+            return 'In Progress';
+        case 'to_do':
+            return 'To Do';
+        case 'done':
+            return 'Done';
+        case 'revised':
+            return 'Revised';
+        default:
+            return status || '';
+    }
+}
+
+function formatItemType(type) {
+    if (!type) {
+        return '';
+    }
+    return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function formatWordCount(count) {
+    const value = Number(count) || 0;
+    return `${value.toLocaleString()} words`;
 }
 
 // Dictation module
