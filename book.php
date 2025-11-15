@@ -74,55 +74,115 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
 
         <!-- Main Content Area -->
         <main class="content-area">
-            <?php if ($currentItem): ?>
-                <div class="content-header">
-                    <div>
-                        <h2><?php echo h($currentItem['title']); ?></h2>
-                        <div class="item-meta">
-                            <span class="item-type"><?php echo h($currentItem['item_type']); ?></span>
-                            <span class="word-count"><?php echo number_format($currentItem['word_count']); ?> words</span>
-                            <select class="status-select" onchange="updateItemStatus(<?php echo $currentItem['id']; ?>, this.value)">
-                                <option value="to_do" <?php echo $currentItem['status'] === 'to_do' ? 'selected' : ''; ?>>To Do</option>
-                                <option value="in_progress" <?php echo $currentItem['status'] === 'in_progress' ? 'selected' : ''; ?>>In Progress</option>
-                                <option value="done" <?php echo $currentItem['status'] === 'done' ? 'selected' : ''; ?>>Done</option>
-                                <option value="revised" <?php echo $currentItem['status'] === 'revised' ? 'selected' : ''; ?>>Revised</option>
-                            </select>
+            <div class="workspace-tabs" id="workspaceTabs" role="tablist" aria-label="Workspace views">
+                <button type="button" class="workspace-tab" id="workspaceTab-editor" role="tab" aria-controls="editorPanel" aria-selected="true" data-view="editor">✍️ Editor</button>
+                <button type="button" class="workspace-tab" id="workspaceTab-corkboard" role="tab" aria-controls="corkboardPanel" aria-selected="false" data-view="corkboard">🗂️ Corkboard</button>
+                <button type="button" class="workspace-tab" id="workspaceTab-outliner" role="tab" aria-controls="outlinerPanel" aria-selected="false" data-view="outliner">📋 Outliner</button>
+            </div>
+
+            <section id="editorPanel" class="workspace-panel" role="tabpanel" aria-labelledby="workspaceTab-editor" data-view="editor">
+                <?php if ($currentItem): ?>
+                    <div class="content-header">
+                        <div>
+                            <h2><?php echo h($currentItem['title']); ?></h2>
+                            <div class="item-meta">
+                                <span class="item-type"><?php echo h($currentItem['item_type']); ?></span>
+                                <span class="word-count"><?php echo number_format($currentItem['word_count']); ?> words</span>
+                                <label class="sr-only" for="itemStatusSelect">Status</label>
+                                <select id="itemStatusSelect" class="status-select" onchange="updateItemStatus(<?php echo $currentItem['id']; ?>, this.value)">
+                                    <option value="to_do" <?php echo $currentItem['status'] === 'to_do' ? 'selected' : ''; ?>>To Do</option>
+                                    <option value="in_progress" <?php echo $currentItem['status'] === 'in_progress' ? 'selected' : ''; ?>>In Progress</option>
+                                    <option value="done" <?php echo $currentItem['status'] === 'done' ? 'selected' : ''; ?>>Done</option>
+                                    <option value="revised" <?php echo $currentItem['status'] === 'revised' ? 'selected' : ''; ?>>Revised</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="content-actions">
+                            <button class="btn btn-sm" onclick="createSnapshot(<?php echo $currentItem['id']; ?>)">📸 Snapshot</button>
+                            <button class="btn btn-sm" onclick="showItemMetadata(<?php echo $currentItem['id']; ?>)">⚙️ Metadata</button>
+                            <button class="btn btn-sm" onclick="deleteItem(<?php echo $currentItem['id']; ?>)">🗑️ Delete</button>
                         </div>
                     </div>
-                    <div class="content-actions">
-                        <button class="btn btn-sm" onclick="createSnapshot(<?php echo $currentItem['id']; ?>)">📸 Snapshot</button>
-                        <button class="btn btn-sm" onclick="showItemMetadata(<?php echo $currentItem['id']; ?>)">⚙️ Metadata</button>
-                        <button class="btn btn-sm" onclick="deleteItem(<?php echo $currentItem['id']; ?>)">🗑️ Delete</button>
+
+                    <div class="synopsis-section">
+                        <label for="synopsis">Synopsis:</label>
+                        <textarea class="synopsis-input" id="synopsis" placeholder="Brief summary of this section..."><?php echo h($currentItem['synopsis']); ?></textarea>
                     </div>
-                </div>
 
-                <div class="synopsis-section">
-                    <label>Synopsis:</label>
-                    <textarea class="synopsis-input" id="synopsis" placeholder="Brief summary of this section..."><?php echo h($currentItem['synopsis']); ?></textarea>
-                </div>
-
-                <div class="dictation-toolbar">
-                    <div class="dictation-controls">
-                        <button type="button" class="btn btn-sm dictation-btn" data-target="synopsis" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Synopsis</button>
-                        <button type="button" class="btn btn-sm dictation-btn" data-target="contentEditor" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Content</button>
+                    <div class="dictation-toolbar">
+                        <div class="dictation-controls">
+                            <button type="button" class="btn btn-sm dictation-btn" data-target="synopsis" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Synopsis</button>
+                            <button type="button" class="btn btn-sm dictation-btn" data-target="contentEditor" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Content</button>
+                        </div>
+                        <div class="dictation-status" id="dictationStatus" data-default-text="Voice ready">Voice ready</div>
                     </div>
-                    <div class="dictation-status" id="dictationStatus" data-default-text="Voice ready">Voice ready</div>
-                </div>
 
-                <div class="editor-section">
-                    <textarea class="content-editor" id="contentEditor" placeholder="Start writing..."><?php echo h($currentItem['content']); ?></textarea>
-                </div>
+                    <div class="editor-section">
+                        <textarea class="content-editor" id="contentEditor" placeholder="Start writing..."><?php echo h($currentItem['content']); ?></textarea>
+                    </div>
 
-                <div class="save-indicator" id="saveIndicator">
-                    <span class="saved">✓ All changes saved</span>
+                    <div class="save-indicator" id="saveIndicator">
+                        <span class="saved">✓ All changes saved</span>
+                    </div>
+                <?php else: ?>
+                    <div class="empty-editor">
+                        <h3>Welcome to <?php echo h($book['title']); ?>!</h3>
+                        <p>Select an item from the Binder to start writing, or create a new chapter or scene.</p>
+                        <button class="btn btn-primary btn-lg" onclick="showNewItemModal(null)">Create First Chapter</button>
+                    </div>
+                <?php endif; ?>
+            </section>
+
+            <section id="corkboardPanel" class="workspace-panel planning-pane" role="tabpanel" aria-labelledby="workspaceTab-corkboard" data-view="corkboard" hidden>
+                <div class="planning-onboarding" id="corkboardOnboarding">
+                    <h3>Visual planning</h3>
+                    <p>Arrange your scenes like index cards. Drag with a mouse, tap the move handle, or use the arrow keys while focused on a card to reorder.</p>
+                    <ul class="quick-tips">
+                        <li>Cards surface synopsis, status, labels, and word counts.</li>
+                        <li>Drop cards to reshuffle chapters or beats.</li>
+                        <li>Select any card to jump into the editor for deeper edits.</li>
+                    </ul>
                 </div>
-            <?php else: ?>
-                <div class="empty-editor">
-                    <h3>Welcome to <?php echo h($book['title']); ?>!</h3>
-                    <p>Select an item from the Binder to start writing, or create a new chapter or scene.</p>
-                    <button class="btn btn-primary btn-lg" onclick="showNewItemModal(null)">Create First Chapter</button>
+                <div class="planning-toolbar" aria-live="polite">
+                    <span class="collection-label" id="corkboardCollectionLabel">Loading corkboard…</span>
                 </div>
-            <?php endif; ?>
+                <div class="planning-empty" id="corkboardEmpty" hidden>
+                    <p>No cards yet. Add scenes or chapters to see them here.</p>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="showNewItemModal(null)">Create first card</button>
+                </div>
+                <div class="corkboard-grid" id="corkboardGrid" data-parent-id="" aria-live="polite" aria-label="Corkboard cards"></div>
+            </section>
+
+            <section id="outlinerPanel" class="workspace-panel planning-pane" role="tabpanel" aria-labelledby="workspaceTab-outliner" data-view="outliner" hidden>
+                <div class="planning-onboarding" id="outlinerOnboarding">
+                    <h3>Structured outline</h3>
+                    <p>Sort and edit key metadata inline. Changes are autosaved using the same endpoints as the editor.</p>
+                    <ul class="quick-tips">
+                        <li>Click headers to sort columns.</li>
+                        <li>Edit titles or POV fields inline and press Enter to save.</li>
+                        <li>Status updates sync with the binder and corkboard.</li>
+                    </ul>
+                </div>
+                <div class="planning-empty" id="outlinerEmpty" hidden>
+                    <p>No outline rows yet. Start by creating a chapter or scene in the binder.</p>
+                </div>
+                <div class="outliner-table-wrapper">
+                    <table class="outliner-table" aria-label="Outline table">
+                        <thead>
+                            <tr>
+                                <th scope="col"><button type="button" class="outliner-sort" data-sort="title">Title</button></th>
+                                <th scope="col"><button type="button" class="outliner-sort" data-sort="item_type">Type</button></th>
+                                <th scope="col"><button type="button" class="outliner-sort" data-sort="status">Status</button></th>
+                                <th scope="col"><button type="button" class="outliner-sort" data-sort="pov">POV</button></th>
+                                <th scope="col"><button type="button" class="outliner-sort" data-sort="word_count">Word Count</button></th>
+                            </tr>
+                        </thead>
+                        <tbody id="outlinerTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <div class="planning-status" id="planningStatus" role="status" aria-live="polite"></div>
         </main>
 
         <!-- Right Sidebar: AI Chat Assistant -->
@@ -205,20 +265,22 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
         </div>
     </div>
 
+    <script src="assets/js/planning-utils.js"></script>
     <script src="assets/js/book.js"></script>
 </body>
 </html>
 
 <?php
-function renderTree($items, $currentItemId, $bookId) {
-    $html = '<ul class="tree-list">';
+function renderTree($items, $currentItemId, $bookId, $parentId = null) {
+    $parentAttribute = $parentId === null ? 'root' : (int) $parentId;
+    $html = '<ul class="tree-list" data-parent-id="' . $parentAttribute . '">';
     foreach ($items as $item) {
         $hasChildren = !empty($item['children']);
         $isActive = $item['id'] == $currentItemId;
         $icon = getItemIcon($item['item_type']);
 
-        $html .= '<li class="tree-item' . ($isActive ? ' active' : '') . '">';
-        $html .= '<div class="tree-item-content">';
+        $html .= '<li class="tree-item' . ($isActive ? ' active' : '') . '" data-item-id="' . (int) $item['id'] . '" data-item-type="' . h($item['item_type']) . '" data-position="' . (int) $item['position'] . '">';
+        $html .= '<div class="tree-item-content" data-item-id="' . (int) $item['id'] . '">';
 
         if ($hasChildren) {
             $html .= '<span class="tree-toggle" onclick="toggleTreeItem(this)">▶</span>';
@@ -227,7 +289,7 @@ function renderTree($items, $currentItemId, $bookId) {
         }
 
         $html .= '<span class="tree-icon">' . $icon . '</span>';
-        $html .= '<a href="book.php?id=' . $bookId . '&item=' . $item['id'] . '" class="tree-label">';
+        $html .= '<a href="book.php?id=' . $bookId . '&item=' . $item['id'] . '" class="tree-label" data-item-id="' . (int) $item['id'] . '" aria-current="' . ($isActive ? 'page' : 'false') . '">';
         $html .= h($item['title']);
         $html .= '</a>';
 
@@ -238,7 +300,7 @@ function renderTree($items, $currentItemId, $bookId) {
         $html .= '</div>';
 
         if ($hasChildren) {
-            $html .= renderTree($item['children'], $currentItemId, $bookId);
+            $html .= renderTree($item['children'], $currentItemId, $bookId, $item['id']);
         }
 
         $html .= '</li>';

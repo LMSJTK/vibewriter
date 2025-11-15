@@ -137,19 +137,26 @@ function deleteBookItem($itemId, $bookId) {
 /**
  * Reorder book items
  */
-function reorderBookItems($bookId, $items) {
+function reorderBookItems($bookId, $parentId, $items) {
     $pdo = getDBConnection();
 
     try {
         $pdo->beginTransaction();
 
-        foreach ($items as $position => $itemId) {
+        $positionedItems = array_values($items);
+
+        foreach ($positionedItems as $position => $itemId) {
             $stmt = $pdo->prepare("
                 UPDATE book_items
-                SET position = ?
+                SET position = ?, parent_id = ?
                 WHERE id = ? AND book_id = ?
             ");
-            $stmt->execute([$position, $itemId, $bookId]);
+            $stmt->execute([
+                $position,
+                $parentId,
+                $itemId,
+                $bookId
+            ]);
         }
 
         $pdo->commit();
