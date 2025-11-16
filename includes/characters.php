@@ -326,9 +326,12 @@ function getCharacterStats($characterId) {
  */
 function generateCharacterImage($character, $additionalPrompt = null) {
     $headers = ['Content-Type: application/json'];
-    $useOAuth = google_has_service_account_credentials();
 
-    if ($useOAuth) {
+    // For image generation, prefer API key authentication as it uses generativelanguage.googleapis.com
+    // OAuth/service accounts would require Vertex AI endpoints which have different URLs
+    if (!empty(GEMINI_API_KEY)) {
+        $headers[] = 'x-goog-api-key: ' . GEMINI_API_KEY;
+    } elseif (google_has_service_account_credentials()) {
         $tokenResult = get_google_service_account_token(
             defined('GOOGLE_GEMINI_IMAGE_SCOPES') ? GOOGLE_GEMINI_IMAGE_SCOPES : null,
             'gemini-image'
@@ -339,8 +342,6 @@ function generateCharacterImage($character, $additionalPrompt = null) {
         }
 
         $headers[] = 'Authorization: Bearer ' . $tokenResult['token'];
-    } elseif (!empty(GEMINI_API_KEY)) {
-        $headers[] = 'x-goog-api-key: ' . GEMINI_API_KEY;
     } else {
         return ['success' => false, 'message' => 'Gemini credentials not configured'];
     }
