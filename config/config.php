@@ -49,6 +49,45 @@ define('IMAGE_API_ENDPOINT', ''); // e.g., DALL-E, Midjourney, Stable Diffusion
 // Google Gemini API for image generation
 define('GEMINI_API_KEY', ''); // Add your Gemini API key here
 
+// Google Text-to-Speech (Gemini TTS) configuration
+define('GOOGLE_TTS_API_KEY', '');
+define('GOOGLE_TTS_ACCESS_TOKEN', '');
+define('GOOGLE_TTS_USER_PROJECT', '');
+define('GOOGLE_TTS_ENDPOINT', 'https://texttospeech.googleapis.com/v1/text:synthesize');
+define('GOOGLE_TTS_DEFAULT_LANGUAGE', 'en-US');
+define('GOOGLE_TTS_DEFAULT_MODEL', 'gemini-2.5-flash-tts');
+define('GOOGLE_TTS_DEFAULT_AUDIO_ENCODING', 'MP3');
+define('GOOGLE_TTS_VOICES', [
+    [
+        'name' => 'Kore',
+        'label' => 'Kore · Curious contemporary',
+        'languageCode' => 'en-US',
+        'model_name' => 'gemini-2.5-flash-tts',
+        'prompt' => 'Say the following in a curious, upbeat tone that feels conversational and modern.'
+    ],
+    [
+        'name' => 'Rhea',
+        'label' => 'Rhea · Warm storyteller',
+        'languageCode' => 'en-US',
+        'model_name' => 'gemini-2.5-flash-tts',
+        'prompt' => 'Speak like a warm narrator with gentle pacing and a hint of wonder.'
+    ],
+    [
+        'name' => 'Nia',
+        'label' => 'Nia · Dramatic performer',
+        'languageCode' => 'en-GB',
+        'model_name' => 'gemini-2.5-flash-tts',
+        'prompt' => 'Deliver the lines with dramatic flair and crisp articulation.'
+    ],
+    [
+        'name' => 'Piper',
+        'label' => 'Piper · Youthful energy',
+        'languageCode' => 'en-AU',
+        'model_name' => 'gemini-2.5-flash-tts',
+        'prompt' => 'Sound energetic, fresh, and a little playful.'
+    ]
+]);
+
 // Timezone
 date_default_timezone_set('UTC');
 

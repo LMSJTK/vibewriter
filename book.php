@@ -3,6 +3,7 @@ require_once 'config/config.php';
 require_once 'includes/auth.php';
 require_once 'includes/books.php';
 require_once 'includes/book_items.php';
+require_once 'includes/tts_client.php';
 
 requireLogin();
 
@@ -20,6 +21,7 @@ if (!$book) {
 
 $items = getBookItems($bookId);
 $tree = buildTree($items);
+$aiVoiceConfig = getAIChatVoiceConfig();
 
 // Get current selected item
 $currentItemId = $_GET['item'] ?? null;
@@ -212,10 +214,20 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
             <div class="ai-chat-input-area">
                 <div class="ai-chat-tools">
                     <button type="button" class="btn btn-sm dictation-btn" data-target="aiChatInput" data-status-target="aiDictationStatus" data-status-idle="Tap the mic to speak">🎙️ Dictate</button>
-                    <button type="button" class="btn btn-sm ai-voice-toggle" id="aiVoiceToggle" aria-pressed="false">
+                    <button type="button" class="btn btn-sm ai-voice-toggle" id="aiVoiceToggle" aria-pressed="false" data-tts-mode="<?php echo h($aiVoiceConfig['mode']); ?>">
                         <span class="icon" aria-hidden="true">🔈</span>
                         <span class="label">Voice replies off</span>
                     </button>
+                    <?php if ($aiVoiceConfig['mode'] === 'google' && !empty($aiVoiceConfig['voices'])): ?>
+                        <label for="aiVoiceSelect" class="sr-only">AI voice</label>
+                        <select id="aiVoiceSelect" class="ai-voice-select">
+                            <?php foreach ($aiVoiceConfig['voices'] as $voiceIndex => $voiceOption): ?>
+                                <option value="<?php echo h($voiceOption['name']); ?>" data-language="<?php echo h($voiceOption['languageCode']); ?>" data-model="<?php echo h($voiceOption['model']); ?>" data-prompt="<?php echo h($voiceOption['prompt']); ?>" data-audio="<?php echo h($voiceOption['audioEncoding']); ?>" <?php echo $voiceIndex === 0 ? 'selected' : ''; ?>>
+                                    <?php echo h($voiceOption['label']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php endif; ?>
                     <div class="ai-dictation-status" id="aiDictationStatus" data-default-text="Tap the mic to speak">Tap the mic to speak</div>
                 </div>
                 <div class="ai-chat-input-row">
@@ -265,6 +277,9 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
         </div>
     </div>
 
+    <script>
+        window.aiVoiceConfig = <?php echo json_encode($aiVoiceConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+    </script>
     <script src="assets/js/planning-utils.js"></script>
     <script src="assets/js/book.js"></script>
 </body>

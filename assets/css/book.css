@@ -475,6 +475,21 @@
     color: white;
 }
 
+.ai-voice-select {
+    min-width: 180px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+    color: var(--text-color);
+}
+
+.ai-voice-select:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+}
+
 .dictation-btn.disabled,
 .dictation-btn:disabled {
     opacity: 0.6;
