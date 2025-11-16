@@ -50,8 +50,19 @@ let dictationIsListening = false;
 let dictationActiveTarget = null;
 let dictationActiveButton = null;
 
+const globalAIVoiceConfig = typeof window !== 'undefined' && window.aiVoiceConfig ? window.aiVoiceConfig : {};
+const supportsAbortController = typeof AbortController === 'function';
+const aiVoiceVoices = Array.isArray(globalAIVoiceConfig.voices) ? globalAIVoiceConfig.voices : [];
+const aiVoiceEndpoint = globalAIVoiceConfig.endpoint || 'api/text_to_speech.php';
+const aiVoiceDefaultEncoding = (globalAIVoiceConfig.defaultAudioEncoding || 'MP3').toUpperCase();
+const networkVoiceModes = ['google', 'elevenlabs'];
+const configuredVoiceMode = typeof globalAIVoiceConfig.mode === 'string' ? globalAIVoiceConfig.mode : 'browser';
+let aiVoiceMode = networkVoiceModes.includes(configuredVoiceMode) && aiVoiceVoices.length ? configuredVoiceMode : 'browser';
 let aiVoiceEnabled = false;
 let aiVoiceUtterance = null;
+let aiVoiceSelectElement = null;
+let aiVoiceAudioElement = null;
+let aiVoiceRequestController = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
@@ -1421,27 +1432,50 @@ function toggleActiveDictationButton(activeButton) {
 }
 
 // AI chat voice playback
-function initializeAIChatVoice() {
-    const toggleButton = document.getElementById('aiVoiceToggle');
-    if (!toggleButton) {
+function supportsSpeechSynthesis() {
+    return typeof window !== 'undefined' && 'speechSynthesis' in window;
+}
+
+function disableAIVoiceButton(button, message = 'Voice replies unavailable') {
+    if (!button) {
         return;
     }
 
-    if (!('speechSynthesis' in window)) {
-        toggleButton.disabled = true;
-        toggleButton.classList.add('disabled');
-        toggleButton.setAttribute('title', 'Voice replies are not supported in this browser.');
-        toggleButton.setAttribute('aria-pressed', 'false');
-        const icon = toggleButton.querySelector('.icon');
-        if (icon) {
-            icon.textContent = '🔇';
-        }
-        const label = toggleButton.querySelector('.label');
-        if (label) {
-            label.textContent = 'Voice replies unavailable';
-        } else {
-            toggleButton.textContent = '🔇 Voice replies unavailable';
-        }
+    button.disabled = true;
+    button.classList.add('disabled');
+    button.setAttribute('title', message);
+    button.setAttribute('aria-pressed', 'false');
+
+    const icon = button.querySelector('.icon');
+    if (icon) {
+        icon.textContent = '🔇';
+    }
+
+    const label = button.querySelector('.label');
+    if (label) {
+        label.textContent = message;
+    } else {
+        button.textContent = `🔇 ${message}`;
+    }
+}
+
+function initializeAIChatVoice() {
+    const toggleButton = document.getElementById('aiVoiceToggle');
+    if (!toggleButton) {
+        aiVoiceMode = 'none';
+        return;
+    }
+
+    aiVoiceSelectElement = document.getElementById('aiVoiceSelect');
+
+    const fetchSupported = typeof window !== 'undefined' && typeof window.fetch === 'function';
+    if (isNetworkVoiceMode() && (!fetchSupported || !aiVoiceVoices.length)) {
+        aiVoiceMode = supportsSpeechSynthesis() ? 'browser' : 'none';
+    }
+
+    if (!isNetworkVoiceMode() && !supportsSpeechSynthesis()) {
+        disableAIVoiceButton(toggleButton);
+        aiVoiceMode = 'none';
         return;
     }
 
@@ -1454,6 +1488,14 @@ function initializeAIChatVoice() {
             cancelAIVoicePlayback();
         }
     });
+
+    if (isNetworkVoiceMode() && aiVoiceSelectElement) {
+        aiVoiceSelectElement.addEventListener('change', () => {
+            if (aiVoiceEnabled) {
+                cancelAIVoicePlayback();
+            }
+        });
+    }
 }
 
 function updateAIVoiceToggleButton(button) {
@@ -1478,7 +1520,7 @@ function updateAIVoiceToggleButton(button) {
 }
 
 function speakAIResponse(message) {
-    if (!aiVoiceEnabled || !('speechSynthesis' in window)) {
+    if (!aiVoiceEnabled) {
         return;
     }
 
@@ -1487,9 +1529,22 @@ function speakAIResponse(message) {
         return;
     }
 
+    if (isNetworkVoiceMode()) {
+        playNetworkVoiceResponse(plainText);
+        return;
+    }
+
+    if (!supportsSpeechSynthesis()) {
+        return;
+    }
+
+    speakWithBrowserVoice(plainText);
+}
+
+function speakWithBrowserVoice(text) {
     cancelAIVoicePlayback();
 
-    aiVoiceUtterance = new SpeechSynthesisUtterance(plainText);
+    aiVoiceUtterance = new SpeechSynthesisUtterance(text);
     aiVoiceUtterance.rate = 1;
     aiVoiceUtterance.onend = () => {
         aiVoiceUtterance = null;
@@ -1501,8 +1556,106 @@ function speakAIResponse(message) {
     window.speechSynthesis.speak(aiVoiceUtterance);
 }
 
+function playNetworkVoiceResponse(text) {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') {
+        console.warn('Fetch API is not available for AI voice playback.');
+        return;
+    }
+
+    cancelAIVoicePlayback();
+
+    const selectedVoice = getSelectedNetworkVoice();
+    const payload = { text, provider: aiVoiceMode };
+
+    if (selectedVoice) {
+        if (selectedVoice.name) {
+            payload.voice = selectedVoice.name;
+        }
+        if (selectedVoice.languageCode) {
+            payload.languageCode = selectedVoice.languageCode;
+        }
+        if (selectedVoice.prompt) {
+            payload.prompt = selectedVoice.prompt;
+        }
+        if (selectedVoice.model) {
+            payload.model = selectedVoice.model;
+        }
+        if (selectedVoice.voiceId) {
+            payload.voiceId = selectedVoice.voiceId;
+        }
+        if (selectedVoice.voiceSettings) {
+            payload.voice_settings = selectedVoice.voiceSettings;
+        }
+        if (selectedVoice.outputFormat) {
+            payload.output_format = selectedVoice.outputFormat;
+        }
+    }
+
+    payload.audioEncoding = selectedVoice && selectedVoice.audioEncoding
+        ? selectedVoice.audioEncoding
+        : aiVoiceDefaultEncoding;
+
+    const controller = supportsAbortController ? new AbortController() : null;
+    aiVoiceRequestController = controller;
+
+    const fetchOptions = {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    };
+
+    if (controller) {
+        fetchOptions.signal = controller.signal;
+    }
+
+    fetch(aiVoiceEndpoint, fetchOptions)
+        .then((response) => response.json())
+        .then((result) => {
+            if (!result || !result.success || !result.audioContent) {
+                console.error('AI voice playback failed', result && result.message ? result.message : 'Unknown error');
+                return;
+            }
+
+            const mimeType = result.mimeType || 'audio/mpeg';
+            aiVoiceAudioElement = new Audio(`data:${mimeType};base64,${result.audioContent}`);
+            aiVoiceAudioElement.addEventListener('ended', () => {
+                aiVoiceAudioElement = null;
+            });
+            aiVoiceAudioElement.addEventListener('error', () => {
+                aiVoiceAudioElement = null;
+            });
+            aiVoiceAudioElement.play().catch((error) => {
+                console.error('AI voice playback failed', error);
+                aiVoiceAudioElement = null;
+            });
+        })
+        .catch((error) => {
+            if (error && error.name === 'AbortError') {
+                return;
+            }
+            console.error('AI voice request failed', error);
+        })
+        .finally(() => {
+            aiVoiceRequestController = null;
+        });
+}
+
 function cancelAIVoicePlayback() {
-    if (!('speechSynthesis' in window)) {
+    if (isNetworkVoiceMode()) {
+        if (aiVoiceRequestController) {
+            aiVoiceRequestController.abort();
+            aiVoiceRequestController = null;
+        }
+        if (aiVoiceAudioElement) {
+            aiVoiceAudioElement.pause();
+            aiVoiceAudioElement = null;
+        }
+        return;
+    }
+
+    if (!supportsSpeechSynthesis()) {
         return;
     }
 
@@ -1510,6 +1663,53 @@ function cancelAIVoicePlayback() {
         window.speechSynthesis.cancel();
         aiVoiceUtterance = null;
     }
+}
+
+function getSelectedNetworkVoice() {
+    let selectedVoice = null;
+
+    if (aiVoiceSelectElement && aiVoiceSelectElement.options.length) {
+        const option = aiVoiceSelectElement.options[aiVoiceSelectElement.selectedIndex];
+        if (option) {
+            selectedVoice = {
+                id: option.value,
+                name: option.getAttribute('data-name') || option.value,
+                languageCode: option.getAttribute('data-language') || null,
+                model: option.getAttribute('data-model') || null,
+                prompt: option.getAttribute('data-prompt') || null,
+                audioEncoding: (option.getAttribute('data-audio') || aiVoiceDefaultEncoding).toUpperCase(),
+                voiceId: option.getAttribute('data-voice-id') || null,
+                outputFormat: option.getAttribute('data-output-format') || null
+            };
+        }
+    }
+
+    if (!selectedVoice && aiVoiceVoices.length) {
+        return aiVoiceVoices[0];
+    }
+
+    if (selectedVoice && aiVoiceVoices.length) {
+        const match = aiVoiceVoices.find((voice) => {
+            if (!voice) {
+                return false;
+            }
+            if (voice.id && voice.id === selectedVoice.id) {
+                return true;
+            }
+            if (voice.voiceId && voice.voiceId === selectedVoice.voiceId) {
+                return true;
+            }
+            return false;
+        });
+
+        if (match) {
+            return Object.assign({}, match, selectedVoice);
+        }
+
+        return selectedVoice;
+    }
+
+    return selectedVoice;
 }
 
 function getPlainTextForSpeech(message) {
@@ -1521,6 +1721,10 @@ function getPlainTextForSpeech(message) {
         .replace(/\r?\n/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function isNetworkVoiceMode(mode = aiVoiceMode) {
+    return networkVoiceModes.includes(mode);
 }
 
 // New item modal

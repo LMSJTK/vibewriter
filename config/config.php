@@ -49,6 +49,71 @@ define('IMAGE_API_ENDPOINT', ''); // e.g., DALL-E, Midjourney, Stable Diffusion
 // Google Gemini API for image generation
 define('GEMINI_API_KEY', ''); // Add your Gemini API key here
 
+// Google Text-to-Speech (Gemini TTS) configuration
+define('GOOGLE_TTS_API_KEY', '');
+define('GOOGLE_TTS_ACCESS_TOKEN', '');
+define('GOOGLE_TTS_USER_PROJECT', '');
+define('GOOGLE_TTS_ENDPOINT', 'https://texttospeech.googleapis.com/v1/text:synthesize');
+define('GOOGLE_TTS_DEFAULT_LANGUAGE', 'en-US');
+define('GOOGLE_TTS_DEFAULT_MODEL', 'gemini-2.5-flash-tts');
+define('GOOGLE_TTS_DEFAULT_AUDIO_ENCODING', 'MP3');
+define('GOOGLE_TTS_VOICES', [
+    [
+        'name' => 'Kore',
+        'label' => 'Kore · Curious contemporary',
+        'languageCode' => 'en-US',
+        'model_name' => 'gemini-2.5-flash-tts',
+        'prompt' => 'Say the following in a curious, upbeat tone that feels conversational and modern.'
+    ],
+    [
+        'name' => 'Rhea',
+        'label' => 'Rhea · Warm storyteller',
+        'languageCode' => 'en-US',
+        'model_name' => 'gemini-2.5-flash-tts',
+        'prompt' => 'Speak like a warm narrator with gentle pacing and a hint of wonder.'
+    ],
+    [
+        'name' => 'Nia',
+        'label' => 'Nia · Dramatic performer',
+        'languageCode' => 'en-GB',
+        'model_name' => 'gemini-2.5-flash-tts',
+        'prompt' => 'Deliver the lines with dramatic flair and crisp articulation.'
+    ],
+    [
+        'name' => 'Piper',
+        'label' => 'Piper · Youthful energy',
+        'languageCode' => 'en-AU',
+        'model_name' => 'gemini-2.5-flash-tts',
+        'prompt' => 'Sound energetic, fresh, and a little playful.'
+    ]
+]);
+
+// ElevenLabs Text-to-Speech configuration
+define('ELEVENLABS_API_KEY', '');
+define('ELEVENLABS_TTS_ENDPOINT', 'https://api.elevenlabs.io/v1/text-to-speech');
+define('ELEVENLABS_TTS_DEFAULT_MODEL', 'eleven_multilingual_v2');
+define('ELEVENLABS_TTS_DEFAULT_OUTPUT_FORMAT', 'mp3_44100_128');
+define('ELEVENLABS_TTS_VOICES', [
+    [
+        'id' => '65dhNaIr3Y4ovumVtdy0',
+        'label' => 'Vivid · expressive storyteller',
+        'description' => 'Warm, energetic, with cinematic pacing.',
+        'model_id' => 'eleven_multilingual_v2'
+    ],
+    [
+        'id' => 'qxTFXDYbGcR8GaHSjczg',
+        'label' => 'Noir · calm detective',
+        'description' => 'Steady, grounded delivery perfect for internal monologues.',
+        'model_id' => 'eleven_multilingual_v2'
+    ],
+    [
+        'id' => 'kNie5n4lYl7TrvqBZ4iG',
+        'label' => 'Spark · lively confidant',
+        'description' => 'Friendly and upbeat voice for lighter scenes.',
+        'model_id' => 'eleven_multilingual_v2'
+    ]
+]);
+
 // Timezone
 date_default_timezone_set('UTC');
 

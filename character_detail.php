@@ -3,6 +3,7 @@ require_once 'config/config.php';
 require_once 'includes/auth.php';
 require_once 'includes/books.php';
 require_once 'includes/characters.php';
+require_once 'includes/tts_client.php';
 
 requireLogin();
 
@@ -28,6 +29,7 @@ if (!$character) {
 
 $images = getCharacterImages($characterId);
 $stats = getCharacterStats($characterId);
+$aiVoiceConfig = getAIChatVoiceConfig();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -285,6 +287,38 @@ $stats = getCharacterStats($characterId);
         </div>
 
         <div class="character-chat-input-area">
+            <div class="ai-chat-tools character-chat-tools">
+                <button type="button" class="btn btn-sm dictation-btn"
+                    data-target="characterChatInput"
+                    data-status-target="aiDictationStatus"
+                    data-status-idle="Tap the mic to speak">
+                    🎙️ Dictate
+                </button>
+                <button type="button" class="btn btn-sm ai-voice-toggle" id="aiVoiceToggle" aria-pressed="false"
+                    data-tts-mode="<?php echo h($aiVoiceConfig['mode']); ?>">
+                    <span class="icon" aria-hidden="true">🔈</span>
+                    <span class="label">Voice replies off</span>
+                </button>
+                <?php if (in_array($aiVoiceConfig['mode'], ['google', 'elevenlabs'], true) && !empty($aiVoiceConfig['voices'])): ?>
+                    <label for="aiVoiceSelect" class="sr-only">AI voice</label>
+                    <select id="aiVoiceSelect" class="ai-voice-select">
+                        <?php foreach ($aiVoiceConfig['voices'] as $voiceIndex => $voiceOption): ?>
+                            <option value="<?php echo h($voiceOption['id'] ?? $voiceOption['name']); ?>"
+                                data-name="<?php echo h($voiceOption['name'] ?? ''); ?>"
+                                data-language="<?php echo h($voiceOption['languageCode'] ?? ''); ?>"
+                                data-model="<?php echo h($voiceOption['model'] ?? ''); ?>"
+                                data-prompt="<?php echo h($voiceOption['prompt'] ?? ''); ?>"
+                                data-audio="<?php echo h($voiceOption['audioEncoding'] ?? ''); ?>"
+                                data-voice-id="<?php echo h($voiceOption['voiceId'] ?? ''); ?>"
+                                data-output-format="<?php echo h($voiceOption['outputFormat'] ?? ''); ?>"
+                                <?php echo $voiceIndex === 0 ? 'selected' : ''; ?>>
+                                <?php echo h($voiceOption['label']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                <?php endif; ?>
+                <div class="ai-dictation-status" id="aiDictationStatus" data-default-text="Tap the mic to speak">Tap the mic to speak</div>
+            </div>
             <div class="context-input">
                 <input type="text" id="sceneContext" placeholder="Scene context (optional): e.g., 'in a tense confrontation'">
             </div>
@@ -296,11 +330,13 @@ $stats = getCharacterStats($characterId);
     </aside>
 
     <script>
-        const bookId = <?php echo $bookId; ?>;
-        const characterId = <?php echo $characterId; ?>;
+        window.aiVoiceConfig = <?php echo json_encode($aiVoiceConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+        window.characterBookId = <?php echo (int) $bookId; ?>;
+        const characterId = <?php echo (int) $characterId; ?>;
         const characterName = <?php echo json_encode($character['name']); ?>;
         const characterHasDialogueCapability = <?php echo (!empty($character['personality']) && !empty($character['speech_patterns'])) ? 'true' : 'false'; ?>;
     </script>
+    <script src="assets/js/book.js"></script>
     <script src="assets/js/character_detail.js"></script>
 </body>
 </html>
