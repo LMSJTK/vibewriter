@@ -887,6 +887,14 @@
     flex-shrink: 0;
 }
 
+.character-chat-tools {
+    margin-bottom: 10px;
+}
+
+.character-chat-tools .ai-dictation-status {
+    margin-left: auto;
+}
+
 .context-input {
     margin-bottom: 10px;
 }

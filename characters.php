@@ -228,7 +228,6 @@ $aiVoiceConfig = getAIChatVoiceConfig();
 
     <script>
         window.aiVoiceConfig = <?php echo json_encode($aiVoiceConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-        const bookId = <?php echo $bookId; ?>;
     </script>
     <script src="assets/js/book.js"></script>
     <script src="assets/js/characters.js"></script>
