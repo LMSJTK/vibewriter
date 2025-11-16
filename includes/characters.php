@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/google_oauth.php';
 
 /**
  * Get all characters for a book
@@ -324,8 +325,24 @@ function getCharacterStats($characterId) {
  * Generate character image using Google Gemini API
  */
 function generateCharacterImage($character, $additionalPrompt = null) {
-    if (empty(GEMINI_API_KEY)) {
-        return ['success' => false, 'message' => 'Gemini API key not configured'];
+    $headers = ['Content-Type: application/json'];
+    $useOAuth = google_has_service_account_credentials();
+
+    if ($useOAuth) {
+        $tokenResult = get_google_service_account_token(
+            defined('GOOGLE_GEMINI_IMAGE_SCOPES') ? GOOGLE_GEMINI_IMAGE_SCOPES : null,
+            'gemini-image'
+        );
+
+        if (!$tokenResult['success']) {
+            return $tokenResult;
+        }
+
+        $headers[] = 'Authorization: Bearer ' . $tokenResult['token'];
+    } elseif (!empty(GEMINI_API_KEY)) {
+        $headers[] = 'x-goog-api-key: ' . GEMINI_API_KEY;
+    } else {
+        return ['success' => false, 'message' => 'Gemini credentials not configured'];
     }
 
     // Build image generation prompt from character details
@@ -371,10 +388,7 @@ function generateCharacterImage($character, $additionalPrompt = null) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'x-goog-api-key: ' . GEMINI_API_KEY
-    ]);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
