@@ -331,7 +331,8 @@ $aiVoiceConfig = getAIChatVoiceConfig();
 
     <script>
         window.aiVoiceConfig = <?php echo json_encode($aiVoiceConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-        const characterId = <?php echo $characterId; ?>;
+        window.characterBookId = <?php echo (int) $bookId; ?>;
+        const characterId = <?php echo (int) $characterId; ?>;
         const characterName = <?php echo json_encode($character['name']); ?>;
         const characterHasDialogueCapability = <?php echo (!empty($character['personality']) && !empty($character['speech_patterns'])) ? 'true' : 'false'; ?>;
     </script>

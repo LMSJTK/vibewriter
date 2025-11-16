@@ -5,6 +5,9 @@
 
 let autoSaveTimer;
 let hasUnsavedChanges = false;
+const detailBookId = typeof window !== 'undefined' && typeof window.characterBookId !== 'undefined'
+    ? window.characterBookId
+    : (typeof window !== 'undefined' && typeof window.bookId !== 'undefined' ? window.bookId : null);
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -60,7 +63,7 @@ function initializeAutoSave() {
 // Save Character
 async function saveCharacter() {
     const data = {
-        book_id: bookId,
+        book_id: detailBookId,
         character_id: characterId,
         age: document.getElementById('age').value || null,
         gender: document.getElementById('gender').value,
@@ -136,7 +139,7 @@ async function deleteCharacter() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                book_id: bookId,
+                book_id: detailBookId,
                 character_id: characterId
             })
         });
@@ -145,7 +148,7 @@ async function deleteCharacter() {
 
         if (result.success) {
             // Redirect to characters page
-            window.location.href = `characters.php?id=${bookId}`;
+            window.location.href = `characters.php?id=${detailBookId}`;
         } else {
             alert('Failed to delete character: ' + result.message);
         }
@@ -202,7 +205,7 @@ async function sendCharacterMessage() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                book_id: bookId,
+                book_id: detailBookId,
                 character_id: characterId,
                 message: message,
                 context: context
@@ -393,7 +396,7 @@ async function generateImage() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                book_id: bookId,
+                book_id: detailBookId,
                 character_id: characterId,
                 additional_prompt: null // Could add a prompt input field later
             })
@@ -421,6 +424,18 @@ async function generateImage() {
         }
     }
 }
+
+const characterDetailExports = typeof window !== 'undefined'
+    ? window
+    : (typeof globalThis !== 'undefined' ? globalThis : {});
+characterDetailExports.switchTab = switchTab;
+characterDetailExports.deleteCharacter = deleteCharacter;
+characterDetailExports.chatWithCharacter = chatWithCharacter;
+characterDetailExports.closeCharacterChat = closeCharacterChat;
+characterDetailExports.sendCharacterMessage = sendCharacterMessage;
+characterDetailExports.setPrimaryImage = setPrimaryImage;
+characterDetailExports.generateImage = generateImage;
+characterDetailExports.saveDialogueToScene = saveDialogueToScene;
 
 // Utility function
 function escapeHtml(text) {
