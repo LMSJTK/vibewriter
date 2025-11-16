@@ -372,7 +372,7 @@ function saveDialogueToScene(dialogueId) {
 }
 
 // Generate Character Image
-async function generateImage() {
+window.generateImage = async function() {
     const generateBtn = document.getElementById('generateImageBtn');
 
     // Confirm if character has limited description
@@ -434,7 +434,7 @@ characterDetailExports.chatWithCharacter = chatWithCharacter;
 characterDetailExports.closeCharacterChat = closeCharacterChat;
 characterDetailExports.sendCharacterMessage = sendCharacterMessage;
 characterDetailExports.setPrimaryImage = setPrimaryImage;
-characterDetailExports.generateImage = generateImage;
+// generateImage is defined directly on window above
 characterDetailExports.saveDialogueToScene = saveDialogueToScene;
 
 // Utility function
