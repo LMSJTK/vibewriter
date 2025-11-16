@@ -55,7 +55,9 @@ const supportsAbortController = typeof AbortController === 'function';
 const aiVoiceVoices = Array.isArray(globalAIVoiceConfig.voices) ? globalAIVoiceConfig.voices : [];
 const aiVoiceEndpoint = globalAIVoiceConfig.endpoint || 'api/text_to_speech.php';
 const aiVoiceDefaultEncoding = (globalAIVoiceConfig.defaultAudioEncoding || 'MP3').toUpperCase();
-let aiVoiceMode = globalAIVoiceConfig.mode === 'google' && aiVoiceVoices.length ? 'google' : 'browser';
+const networkVoiceModes = ['google', 'elevenlabs'];
+const configuredVoiceMode = typeof globalAIVoiceConfig.mode === 'string' ? globalAIVoiceConfig.mode : 'browser';
+let aiVoiceMode = networkVoiceModes.includes(configuredVoiceMode) && aiVoiceVoices.length ? configuredVoiceMode : 'browser';
 let aiVoiceEnabled = false;
 let aiVoiceUtterance = null;
 let aiVoiceSelectElement = null;
@@ -1467,11 +1469,11 @@ function initializeAIChatVoice() {
     aiVoiceSelectElement = document.getElementById('aiVoiceSelect');
 
     const fetchSupported = typeof window !== 'undefined' && typeof window.fetch === 'function';
-    if (aiVoiceMode === 'google' && (!fetchSupported || !aiVoiceVoices.length)) {
+    if (isNetworkVoiceMode() && (!fetchSupported || !aiVoiceVoices.length)) {
         aiVoiceMode = supportsSpeechSynthesis() ? 'browser' : 'none';
     }
 
-    if (aiVoiceMode !== 'google' && !supportsSpeechSynthesis()) {
+    if (!isNetworkVoiceMode() && !supportsSpeechSynthesis()) {
         disableAIVoiceButton(toggleButton);
         aiVoiceMode = 'none';
         return;
@@ -1487,7 +1489,7 @@ function initializeAIChatVoice() {
         }
     });
 
-    if (aiVoiceMode === 'google' && aiVoiceSelectElement) {
+    if (isNetworkVoiceMode() && aiVoiceSelectElement) {
         aiVoiceSelectElement.addEventListener('change', () => {
             if (aiVoiceEnabled) {
                 cancelAIVoicePlayback();
@@ -1527,8 +1529,8 @@ function speakAIResponse(message) {
         return;
     }
 
-    if (aiVoiceMode === 'google') {
-        playGoogleVoiceResponse(plainText);
+    if (isNetworkVoiceMode()) {
+        playNetworkVoiceResponse(plainText);
         return;
     }
 
@@ -1554,29 +1556,41 @@ function speakWithBrowserVoice(text) {
     window.speechSynthesis.speak(aiVoiceUtterance);
 }
 
-function playGoogleVoiceResponse(text) {
+function playNetworkVoiceResponse(text) {
     if (typeof window === 'undefined' || typeof window.fetch !== 'function') {
-        console.warn('Fetch API is not available for Google voice playback.');
+        console.warn('Fetch API is not available for AI voice playback.');
         return;
     }
 
     cancelAIVoicePlayback();
 
-    const selectedVoice = getSelectedGoogleVoice();
-    const payload = { text };
+    const selectedVoice = getSelectedNetworkVoice();
+    const payload = { text, provider: aiVoiceMode };
 
-    if (selectedVoice && selectedVoice.name) {
-        payload.voice = selectedVoice.name;
+    if (selectedVoice) {
+        if (selectedVoice.name) {
+            payload.voice = selectedVoice.name;
+        }
+        if (selectedVoice.languageCode) {
+            payload.languageCode = selectedVoice.languageCode;
+        }
+        if (selectedVoice.prompt) {
+            payload.prompt = selectedVoice.prompt;
+        }
+        if (selectedVoice.model) {
+            payload.model = selectedVoice.model;
+        }
+        if (selectedVoice.voiceId) {
+            payload.voiceId = selectedVoice.voiceId;
+        }
+        if (selectedVoice.voiceSettings) {
+            payload.voice_settings = selectedVoice.voiceSettings;
+        }
+        if (selectedVoice.outputFormat) {
+            payload.output_format = selectedVoice.outputFormat;
+        }
     }
-    if (selectedVoice && selectedVoice.languageCode) {
-        payload.languageCode = selectedVoice.languageCode;
-    }
-    if (selectedVoice && selectedVoice.prompt) {
-        payload.prompt = selectedVoice.prompt;
-    }
-    if (selectedVoice && selectedVoice.model) {
-        payload.model = selectedVoice.model;
-    }
+
     payload.audioEncoding = selectedVoice && selectedVoice.audioEncoding
         ? selectedVoice.audioEncoding
         : aiVoiceDefaultEncoding;
@@ -1600,7 +1614,7 @@ function playGoogleVoiceResponse(text) {
         .then((response) => response.json())
         .then((result) => {
             if (!result || !result.success || !result.audioContent) {
-                console.error('Google TTS failed', result && result.message ? result.message : 'Unknown error');
+                console.error('AI voice playback failed', result && result.message ? result.message : 'Unknown error');
                 return;
             }
 
@@ -1621,7 +1635,7 @@ function playGoogleVoiceResponse(text) {
             if (error && error.name === 'AbortError') {
                 return;
             }
-            console.error('Google TTS request failed', error);
+            console.error('AI voice request failed', error);
         })
         .finally(() => {
             aiVoiceRequestController = null;
@@ -1629,7 +1643,7 @@ function playGoogleVoiceResponse(text) {
 }
 
 function cancelAIVoicePlayback() {
-    if (aiVoiceMode === 'google') {
+    if (isNetworkVoiceMode()) {
         if (aiVoiceRequestController) {
             aiVoiceRequestController.abort();
             aiVoiceRequestController = null;
@@ -1651,25 +1665,51 @@ function cancelAIVoicePlayback() {
     }
 }
 
-function getSelectedGoogleVoice() {
+function getSelectedNetworkVoice() {
+    let selectedVoice = null;
+
     if (aiVoiceSelectElement && aiVoiceSelectElement.options.length) {
         const option = aiVoiceSelectElement.options[aiVoiceSelectElement.selectedIndex];
         if (option) {
-            return {
-                name: option.value,
+            selectedVoice = {
+                id: option.value,
+                name: option.getAttribute('data-name') || option.value,
                 languageCode: option.getAttribute('data-language') || null,
                 model: option.getAttribute('data-model') || null,
                 prompt: option.getAttribute('data-prompt') || null,
-                audioEncoding: (option.getAttribute('data-audio') || aiVoiceDefaultEncoding).toUpperCase()
+                audioEncoding: (option.getAttribute('data-audio') || aiVoiceDefaultEncoding).toUpperCase(),
+                voiceId: option.getAttribute('data-voice-id') || null,
+                outputFormat: option.getAttribute('data-output-format') || null
             };
         }
     }
 
-    if (aiVoiceVoices.length) {
+    if (!selectedVoice && aiVoiceVoices.length) {
         return aiVoiceVoices[0];
     }
 
-    return null;
+    if (selectedVoice && aiVoiceVoices.length) {
+        const match = aiVoiceVoices.find((voice) => {
+            if (!voice) {
+                return false;
+            }
+            if (voice.id && voice.id === selectedVoice.id) {
+                return true;
+            }
+            if (voice.voiceId && voice.voiceId === selectedVoice.voiceId) {
+                return true;
+            }
+            return false;
+        });
+
+        if (match) {
+            return Object.assign({}, match, selectedVoice);
+        }
+
+        return selectedVoice;
+    }
+
+    return selectedVoice;
 }
 
 function getPlainTextForSpeech(message) {
@@ -1681,6 +1721,10 @@ function getPlainTextForSpeech(message) {
         .replace(/\r?\n/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function isNetworkVoiceMode(mode = aiVoiceMode) {
+    return networkVoiceModes.includes(mode);
 }
 
 // New item modal

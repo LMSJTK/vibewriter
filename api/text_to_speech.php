@@ -24,26 +24,31 @@ if (empty($input['text'])) {
     jsonResponse(['success' => false, 'message' => 'Text is required'], 400);
 }
 
-if (!hasGoogleTTSConfig()) {
-    jsonResponse(['success' => false, 'message' => 'Google Text-to-Speech is not configured'], 400);
+if (!hasGoogleTTSConfig() && !hasElevenLabsTTSConfig()) {
+    jsonResponse(['success' => false, 'message' => 'Text-to-Speech is not configured'], 400);
 }
 
 try {
     $result = synthesizeTextToSpeech($input['text'], [
+        'provider' => $input['provider'] ?? null,
         'voice' => $input['voice'] ?? ($input['voice_name'] ?? null),
+        'voiceId' => $input['voiceId'] ?? ($input['voice_id'] ?? null),
         'languageCode' => $input['languageCode'] ?? null,
         'prompt' => $input['prompt'] ?? null,
         'audioEncoding' => $input['audioEncoding'] ?? null,
         'model' => $input['model'] ?? ($input['model_name'] ?? null),
         'speakingRate' => $input['speakingRate'] ?? null,
-        'ssml' => $input['ssml'] ?? null
+        'ssml' => $input['ssml'] ?? null,
+        'output_format' => $input['output_format'] ?? null
     ]);
 
     jsonResponse([
         'success' => true,
         'audioContent' => $result['audioContent'],
         'audioEncoding' => $result['audioEncoding'],
-        'mimeType' => $result['mimeType']
+        'mimeType' => $result['mimeType'],
+        'provider' => $result['provider'] ?? null,
+        'outputFormat' => $result['outputFormat'] ?? null
     ]);
 } catch (Throwable $error) {
     jsonResponse([

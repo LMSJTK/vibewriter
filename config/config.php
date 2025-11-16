@@ -88,6 +88,32 @@ define('GOOGLE_TTS_VOICES', [
     ]
 ]);
 
+// ElevenLabs Text-to-Speech configuration
+define('ELEVENLABS_API_KEY', '');
+define('ELEVENLABS_TTS_ENDPOINT', 'https://api.elevenlabs.io/v1/text-to-speech');
+define('ELEVENLABS_TTS_DEFAULT_MODEL', 'eleven_multilingual_v2');
+define('ELEVENLABS_TTS_DEFAULT_OUTPUT_FORMAT', 'mp3_44100_128');
+define('ELEVENLABS_TTS_VOICES', [
+    [
+        'id' => '65dhNaIr3Y4ovumVtdy0',
+        'label' => 'Vivid · expressive storyteller',
+        'description' => 'Warm, energetic, with cinematic pacing.',
+        'model_id' => 'eleven_multilingual_v2'
+    ],
+    [
+        'id' => 'qxTFXDYbGcR8GaHSjczg',
+        'label' => 'Noir · calm detective',
+        'description' => 'Steady, grounded delivery perfect for internal monologues.',
+        'model_id' => 'eleven_multilingual_v2'
+    ],
+    [
+        'id' => 'kNie5n4lYl7TrvqBZ4iG',
+        'label' => 'Spark · lively confidant',
+        'description' => 'Friendly and upbeat voice for lighter scenes.',
+        'model_id' => 'eleven_multilingual_v2'
+    ]
+]);
+
 // Timezone
 date_default_timezone_set('UTC');
 

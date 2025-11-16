@@ -141,11 +141,19 @@ $aiVoiceConfig = getAIChatVoiceConfig();
                     <span class="icon" aria-hidden="true">🔈</span>
                     <span class="label">Voice replies off</span>
                 </button>
-                <?php if ($aiVoiceConfig['mode'] === 'google' && !empty($aiVoiceConfig['voices'])): ?>
+                <?php if (in_array($aiVoiceConfig['mode'], ['google', 'elevenlabs'], true) && !empty($aiVoiceConfig['voices'])): ?>
                     <label for="aiVoiceSelect" class="sr-only">AI voice</label>
                     <select id="aiVoiceSelect" class="ai-voice-select">
                         <?php foreach ($aiVoiceConfig['voices'] as $voiceIndex => $voiceOption): ?>
-                            <option value="<?php echo h($voiceOption['name']); ?>" data-language="<?php echo h($voiceOption['languageCode']); ?>" data-model="<?php echo h($voiceOption['model']); ?>" data-prompt="<?php echo h($voiceOption['prompt']); ?>" data-audio="<?php echo h($voiceOption['audioEncoding']); ?>" <?php echo $voiceIndex === 0 ? 'selected' : ''; ?>>
+                            <option value="<?php echo h($voiceOption['id'] ?? $voiceOption['name']); ?>"
+                                data-name="<?php echo h($voiceOption['name'] ?? ''); ?>"
+                                data-language="<?php echo h($voiceOption['languageCode'] ?? ''); ?>"
+                                data-model="<?php echo h($voiceOption['model'] ?? ''); ?>"
+                                data-prompt="<?php echo h($voiceOption['prompt'] ?? ''); ?>"
+                                data-audio="<?php echo h($voiceOption['audioEncoding'] ?? ''); ?>"
+                                data-voice-id="<?php echo h($voiceOption['voiceId'] ?? ''); ?>"
+                                data-output-format="<?php echo h($voiceOption['outputFormat'] ?? ''); ?>"
+                                <?php echo $voiceIndex === 0 ? 'selected' : ''; ?>>
                                 <?php echo h($voiceOption['label']); ?>
                             </option>
                         <?php endforeach; ?>
