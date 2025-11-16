@@ -49,6 +49,16 @@ define('IMAGE_API_ENDPOINT', ''); // e.g., DALL-E, Midjourney, Stable Diffusion
 // Google Gemini API for image generation
 define('GEMINI_API_KEY', ''); // Add your Gemini API key here
 
+// Google OAuth / service account configuration (optional, used when API keys are not supported)
+define('GOOGLE_SERVICE_ACCOUNT_EMAIL', '');
+define('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY', '');
+define('GOOGLE_OAUTH_TOKEN_URI', 'https://oauth2.googleapis.com/token');
+define('GOOGLE_DEFAULT_OAUTH_SCOPES', [
+    'https://www.googleapis.com/auth/cloud-platform',
+    'https://www.googleapis.com/auth/generative-language.retriever'
+]);
+define('GOOGLE_GEMINI_IMAGE_SCOPES', GOOGLE_DEFAULT_OAUTH_SCOPES);
+
 // Google Text-to-Speech (Gemini TTS) configuration
 define('GOOGLE_TTS_API_KEY', '');
 define('GOOGLE_TTS_ACCESS_TOKEN', '');
