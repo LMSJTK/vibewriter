@@ -256,6 +256,9 @@ function addCharacterMessageToChat(message) {
     `;
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    if (typeof speakAIResponse === 'function') {
+        speakAIResponse(message);
+    }
 }
 
 // Add typing indicator
