@@ -325,25 +325,8 @@ function getCharacterStats($characterId) {
  * Generate character image using Google Gemini API
  */
 function generateCharacterImage($character, $additionalPrompt = null) {
-    $headers = ['Content-Type: application/json'];
-
-    // For image generation, prefer API key authentication as it uses generativelanguage.googleapis.com
-    // OAuth/service accounts would require Vertex AI endpoints which have different URLs
-    if (!empty(GEMINI_API_KEY)) {
-        $headers[] = 'x-goog-api-key: ' . GEMINI_API_KEY;
-    } elseif (google_has_service_account_credentials()) {
-        $tokenResult = get_google_service_account_token(
-            defined('GOOGLE_GEMINI_IMAGE_SCOPES') ? GOOGLE_GEMINI_IMAGE_SCOPES : null,
-            'gemini-image'
-        );
-
-        if (!$tokenResult['success']) {
-            return $tokenResult;
-        }
-
-        $headers[] = 'Authorization: Bearer ' . $tokenResult['token'];
-    } else {
-        return ['success' => false, 'message' => 'Gemini credentials not configured'];
+    if (empty(GEMINI_API_KEY)) {
+        return ['success' => false, 'message' => 'Gemini API key not configured'];
     }
 
     // Build image generation prompt from character details
@@ -389,7 +372,10 @@ function generateCharacterImage($character, $additionalPrompt = null) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'x-goog-api-key: ' . GEMINI_API_KEY
+    ]);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
