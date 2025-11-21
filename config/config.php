@@ -57,7 +57,9 @@ define('GOOGLE_DEFAULT_OAUTH_SCOPES', [
     'https://www.googleapis.com/auth/cloud-platform',
     'https://www.googleapis.com/auth/generative-language.retriever'
 ]);
-define('GOOGLE_GEMINI_IMAGE_SCOPES', GOOGLE_DEFAULT_OAUTH_SCOPES);
+define('GOOGLE_GEMINI_IMAGE_SCOPES', [
+    'https://www.googleapis.com/auth/generative-language'
+]);
 
 // Google Text-to-Speech (Gemini TTS) configuration
 define('GOOGLE_TTS_API_KEY', '');

@@ -325,8 +325,28 @@ function getCharacterStats($characterId) {
  * Generate character image using Google Gemini API
  */
 function generateCharacterImage($character, $additionalPrompt = null) {
-    if (empty(GEMINI_API_KEY)) {
-        return ['success' => false, 'message' => 'Gemini API key not configured'];
+    $authMethod = null;
+    $apiKey = defined('GEMINI_API_KEY') ? GEMINI_API_KEY : '';
+    $accessToken = null;
+    $canUseServiceAccount = google_has_service_account_credentials();
+
+    // Prefer OAuth for image generation because some Gemini endpoints reject API keys
+    if ($canUseServiceAccount) {
+        $tokenResult = get_google_service_account_token(
+            defined('GOOGLE_GEMINI_IMAGE_SCOPES') ? GOOGLE_GEMINI_IMAGE_SCOPES : null,
+            'gemini-image'
+        );
+
+        if (!$tokenResult['success']) {
+            return ['success' => false, 'message' => $tokenResult['message']];
+        }
+
+        $accessToken = $tokenResult['token'];
+        $authMethod = 'oauth';
+    } elseif (!empty($apiKey)) {
+        $authMethod = 'api_key';
+    } else {
+        return ['success' => false, 'message' => 'Gemini API credentials not configured'];
     }
 
     // Build image generation prompt from character details
@@ -356,7 +376,10 @@ function generateCharacterImage($character, $additionalPrompt = null) {
     $prompt .= ". Style: professional book character illustration, high quality, detailed";
 
     // Call Gemini API
-    $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
+    $baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
+    $url = $authMethod === 'api_key'
+        ? $baseUrl . '?key=' . urlencode($apiKey)
+        : $baseUrl;
 
     $data = [
         'contents' => [
@@ -368,24 +391,63 @@ function generateCharacterImage($character, $additionalPrompt = null) {
         ]
     ];
 
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'x-goog-api-key: ' . GEMINI_API_KEY
-    ]);
+    $headers = ['Content-Type: application/json'];
+    $attempts = [];
 
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    $makeRequest = function ($requestUrl, $requestHeaders) use ($data) {
+        $ch = curl_init($requestUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
+
+        $response = curl_exec($ch);
+        $errorMessage = $response === false ? curl_error($ch) : null;
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return [$response, $httpCode, $errorMessage];
+    };
+
+    if ($authMethod === 'oauth') {
+        $headersWithAuth = array_merge($headers, ['Authorization: Bearer ' . $accessToken]);
+        [$response, $httpCode, $errorMessage] = $makeRequest($url, $headersWithAuth);
+        $attempts[] = ['method' => 'oauth', 'http_code' => $httpCode, 'response' => $response, 'error' => $errorMessage];
+    } else {
+        [$response, $httpCode, $errorMessage] = $makeRequest($url, $headers);
+        $attempts[] = ['method' => 'api_key', 'http_code' => $httpCode, 'response' => $response, 'error' => $errorMessage];
+
+        // If API keys are rejected and we have service account credentials, retry with OAuth
+        $apiKeyRejected = $httpCode === 401 && strpos((string)$response, 'API keys are not supported') !== false;
+        if ($apiKeyRejected && $canUseServiceAccount) {
+            $tokenResult = get_google_service_account_token(
+                defined('GOOGLE_GEMINI_IMAGE_SCOPES') ? GOOGLE_GEMINI_IMAGE_SCOPES : null,
+                'gemini-image',
+                true
+            );
+
+            if ($tokenResult['success']) {
+                $accessToken = $tokenResult['token'];
+                $headersWithAuth = array_merge($headers, ['Authorization: Bearer ' . $accessToken]);
+                [$response, $httpCode, $errorMessage] = $makeRequest($baseUrl, $headersWithAuth);
+                $attempts[] = ['method' => 'oauth-retry', 'http_code' => $httpCode, 'response' => $response, 'error' => $errorMessage];
+            }
+        }
+    }
+
+    if ($response === false) {
+        return [
+            'success' => false,
+            'message' => 'Gemini API request failed: ' . ($errorMessage ?? 'Unknown error')
+        ];
+    }
 
     if ($httpCode !== 200) {
         return [
             'success' => false,
             'message' => 'Gemini API request failed with status code: ' . $httpCode,
-            'response' => $response
+            'response' => $response,
+            'attempts' => $attempts
         ];
     }
 
