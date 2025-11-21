@@ -1987,6 +1987,8 @@ function handleDictationResult(event) {
     if (finalTranscript) {
         insertDictationText(target, finalTranscript);
     }
+
+    return null;
 }
 
 function resolveDictationTarget(targetId) {
