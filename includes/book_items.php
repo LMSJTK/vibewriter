@@ -242,6 +242,10 @@ function updateBookWordCount($bookId) {
         WHERE id = ?
     ");
     $stmt->execute([$bookId, $bookId]);
+
+    $stmt = $pdo->prepare("SELECT current_word_count FROM books WHERE id = ?");
+    $stmt->execute([$bookId]);
+    return (int)($stmt->fetchColumn() ?: 0);
 }
 
 /**

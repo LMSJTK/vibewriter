@@ -27,6 +27,13 @@ const planningParentKeyFor = typeof PlanningUtils.parentKeyFor === 'function'
 let activeWorkspaceView = initialWorkspaceView;
 let planningStatusTimer = null;
 
+const outlineNotesState = {
+    ready: false,
+    dirty: false,
+    saving: false,
+    timer: null,
+};
+
 const planningState = {
     ready: false,
     itemsById: {},
@@ -40,6 +47,8 @@ const planningDragState = {
     activeId: null
 };
 
+const richTextEditors = {};
+
 // Auto-save timer
 let autoSaveTimer;
 let hasUnsavedChanges = false;
@@ -49,6 +58,14 @@ let dictationRecognition = null;
 let dictationIsListening = false;
 let dictationActiveTarget = null;
 let dictationActiveButton = null;
+
+const vibeState = {
+    data: typeof window !== 'undefined' && window.initialBookVibe ? window.initialBookVibe : null,
+    currentIndex: 0,
+    isPlaying: false,
+    playerFrame: null,
+    refreshing: false
+};
 
 const globalAIVoiceConfig = typeof window !== 'undefined' && window.aiVoiceConfig ? window.aiVoiceConfig : {};
 const supportsAbortController = typeof AbortController === 'function';
@@ -64,8 +81,92 @@ let aiVoiceSelectElement = null;
 let aiVoiceAudioElement = null;
 let aiVoiceRequestController = null;
 
+function setupQuillEditor({ key, containerId, sourceId, toolbarId, placeholder }) {
+    if (typeof Quill === 'undefined') {
+        return null;
+    }
+
+    const container = document.getElementById(containerId);
+    const source = document.getElementById(sourceId);
+
+    if (!container || !source) {
+        return null;
+    }
+
+    const quill = new Quill(container, {
+        theme: 'snow',
+        placeholder,
+        modules: {
+            toolbar: toolbarId ? `#${toolbarId}` : false
+        }
+    });
+
+    const initialValue = source.value || '';
+    if (initialValue) {
+        quill.clipboard.dangerouslyPasteHTML(initialValue, 'silent');
+    }
+
+    richTextEditors[key] = { quill, source };
+    document.body.classList.add('quill-enabled');
+
+    quill.on('text-change', (_delta, _oldDelta, source) => {
+        if (source === 'silent') {
+            return;
+        }
+
+        const html = quill.root.innerHTML || '';
+        source.value = normalizeRichTextValue(html);
+    });
+
+    return quill;
+}
+
+function getRichTextValue(key, fallbackId) {
+    const entry = richTextEditors[key];
+    if (entry?.source) {
+        return normalizeRichTextValue(entry.source.value);
+    }
+
+    if (fallbackId) {
+        const fallback = document.getElementById(fallbackId);
+        if (fallback) {
+            return fallback.value;
+        }
+    }
+
+    return '';
+}
+
+function setRichTextValue(key, value, fallbackId) {
+    const normalized = normalizeRichTextValue(value || '');
+    const entry = richTextEditors[key];
+
+    if (entry?.source) {
+        entry.source.value = normalized;
+    }
+
+    if (entry?.quill) {
+        entry.quill.clipboard.dangerouslyPasteHTML(normalized, 'silent');
+    } else if (fallbackId) {
+        const fallback = document.getElementById(fallbackId);
+        if (fallback) {
+            fallback.value = normalized;
+        }
+    }
+}
+
+function normalizeRichTextValue(html) {
+    if (!html) {
+        return '';
+    }
+
+    const trimmed = html.trim();
+    return trimmed === '<p><br></p>' ? '' : trimmed;
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
+    initializeRichTextEditors();
     initializeEditor();
     initializeTreeToggles();
     initializeDictation();
@@ -74,6 +175,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeBinderSelectionSync();
     initializeOutlinerInteractions();
     initializePlanningViews();
+    initializeOutlineNotes();
+    initializeBookVibe();
 
     if (Number.isFinite(planningState.selectedItemId)) {
         document.dispatchEvent(new CustomEvent('book:itemSelected', {
@@ -98,27 +201,42 @@ document.addEventListener('book:itemSelected', (event) => {
 });
 
 // Editor initialization and auto-save
+function initializeRichTextEditors() {
+    setupQuillEditor({
+        key: 'synopsis',
+        containerId: 'synopsisEditor',
+        sourceId: 'synopsis',
+        toolbarId: 'synopsisToolbar',
+        placeholder: 'Brief summary of this section...'
+    });
+
+    setupQuillEditor({
+        key: 'content',
+        containerId: 'contentEditorRich',
+        sourceId: 'contentEditor',
+        toolbarId: 'contentToolbar',
+        placeholder: 'Start writing...'
+    });
+
+    setupQuillEditor({
+        key: 'outlineNotes',
+        containerId: 'outlineNotesQuill',
+        sourceId: 'outlineNotesEditor',
+        toolbarId: 'outlineNotesToolbar',
+        placeholder: 'Type your outline here. Press Tab to indent nested beats or Shift+Tab to outdent.'
+    });
+}
+
 function initializeEditor() {
-    const contentEditor = document.getElementById('contentEditor');
-    const synopsisInput = document.getElementById('synopsis');
+    const markPendingSave = () => {
+        hasUnsavedChanges = true;
+        showSavingIndicator();
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(saveContent, 2000);
+    };
 
-    if (contentEditor) {
-        contentEditor.addEventListener('input', function() {
-            hasUnsavedChanges = true;
-            showSavingIndicator();
-            clearTimeout(autoSaveTimer);
-            autoSaveTimer = setTimeout(saveContent, 2000); // Auto-save after 2 seconds of inactivity
-        });
-    }
-
-    if (synopsisInput) {
-        synopsisInput.addEventListener('input', function() {
-            hasUnsavedChanges = true;
-            showSavingIndicator();
-            clearTimeout(autoSaveTimer);
-            autoSaveTimer = setTimeout(saveContent, 2000);
-        });
-    }
+    bindEditorChange('content', 'contentEditor', markPendingSave);
+    bindEditorChange('synopsis', 'synopsis', markPendingSave);
 
     // Warn before leaving if unsaved changes
     window.addEventListener('beforeunload', function(e) {
@@ -129,12 +247,26 @@ function initializeEditor() {
     });
 }
 
+function bindEditorChange(key, fallbackId, handler) {
+    const entry = richTextEditors[key];
+
+    if (entry?.quill) {
+        entry.quill.on('text-change', handler);
+        return;
+    }
+
+    const fallback = document.getElementById(fallbackId);
+    if (fallback) {
+        fallback.addEventListener('input', handler);
+    }
+}
+
 // Save content via AJAX
 async function saveContent() {
     if (!itemId) return;
 
-    const content = document.getElementById('contentEditor')?.value || '';
-    const synopsis = document.getElementById('synopsis')?.value || '';
+    const content = getRichTextValue('content', 'contentEditor');
+    const synopsis = getRichTextValue('synopsis', 'synopsis');
 
     try {
         const response = await fetch('api/save_item.php', {
@@ -158,6 +290,15 @@ async function saveContent() {
             // Update word count if provided
             if (result.word_count !== undefined) {
                 updateWordCount(result.word_count);
+            }
+            if (result.book_word_count !== undefined) {
+                updateBookWordCountDisplay(result.book_word_count);
+            }
+            if (result.vibe_needed) {
+                requestBookVibe({
+                    milestoneLabel: result.vibe_label,
+                    milestoneValue: result.vibe_value
+                });
             }
         } else {
             showErrorIndicator();
@@ -191,12 +332,271 @@ function showErrorIndicator() {
 }
 
 function updateWordCount(wordCount) {
-    const elements = document.querySelectorAll('.word-count');
+    const elements = document.querySelectorAll('.item-word-count');
     elements.forEach(el => {
-        if (el.closest('.item-meta')) {
-            el.textContent = `${wordCount.toLocaleString()} words`;
-        }
+        el.textContent = `${wordCount.toLocaleString()} words`;
     });
+}
+
+function updateBookWordCountDisplay(bookWordCount) {
+    const display = document.querySelector('.book-word-count');
+    if (!display || !Number.isFinite(bookWordCount)) {
+        return;
+    }
+    display.textContent = `${bookWordCount.toLocaleString()} words`;
+}
+
+// Book vibe helpers
+function initializeBookVibe() {
+    vibeState.playerFrame = document.getElementById('vibePlayerFrame');
+
+    const refreshButton = document.getElementById('refreshVibeButton');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', () => requestBookVibe({ force: true }));
+    }
+
+    const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+    const nextBtn = document.getElementById('vibeNextBtn');
+    const prevBtn = document.getElementById('vibePrevBtn');
+
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', toggleVibePlayback);
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => changeVibeTrack(1));
+    }
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => changeVibeTrack(-1));
+    }
+
+    if (vibeState.data) {
+        applyBookVibe(vibeState.data);
+    } else {
+        fetchBookVibe();
+    }
+}
+
+async function fetchBookVibe() {
+    if (!bookId) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`api/get_book_vibe.php?book_id=${bookId}`);
+        const result = await response.json();
+        if (result.success && result.vibe) {
+            applyBookVibe(result.vibe);
+        }
+    } catch (error) {
+        console.error('Failed to load book vibe', error);
+    }
+}
+
+async function requestBookVibe({ milestoneLabel = null, milestoneValue = null, force = false } = {}) {
+    if (!bookId || vibeState.refreshing) {
+        return;
+    }
+
+    vibeState.refreshing = true;
+    setVibeStatus('Requesting a fresh vibe...');
+
+    try {
+        const response = await fetch('api/request_book_vibe.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                book_id: bookId,
+                milestone_label: milestoneLabel,
+                milestone_value: milestoneValue,
+                force
+            })
+        });
+
+        const result = await response.json();
+        if (result.success && result.vibe) {
+            applyBookVibe(result.vibe);
+            setVibeStatus('Vibe updated');
+        } else if (!result.success) {
+            setVibeStatus(result.message || 'Could not update vibe');
+        }
+    } catch (error) {
+        console.error('Vibe request failed', error);
+        setVibeStatus('Vibe request failed');
+    } finally {
+        vibeState.refreshing = false;
+    }
+}
+
+function applyBookVibe(vibe) {
+    if (!vibe) {
+        return;
+    }
+
+    vibeState.data = vibe;
+    vibeState.currentIndex = 0;
+
+    applyVibePalette(vibe.palette || {});
+
+    const summary = document.getElementById('vibeSummaryText');
+    if (summary && vibe.summary) {
+        summary.textContent = vibe.summary;
+    }
+
+    const milestoneText = document.getElementById('vibeMilestoneText');
+    if (milestoneText && vibe.milestone_label) {
+        milestoneText.textContent = vibe.milestone_label;
+    }
+
+    updateVibeTrackDisplay();
+}
+
+function applyVibePalette(palette) {
+    const primary = palette.primary || '#5b67ff';
+    const secondary = palette.secondary || '#0f172a';
+    const accent = palette.accent || '#e0f2fe';
+
+    document.documentElement.style.setProperty('--vibe-primary', primary);
+    document.documentElement.style.setProperty('--vibe-secondary', secondary);
+    document.documentElement.style.setProperty('--vibe-accent', accent);
+    document.body.classList.add('vibe-themed');
+
+    const banner = document.getElementById('bookVibeBanner');
+    if (banner) {
+        banner.style.setProperty('--vibe-primary', primary);
+        banner.style.setProperty('--vibe-secondary', secondary);
+        banner.style.setProperty('--vibe-accent', accent);
+    }
+
+    const chips = document.querySelectorAll('#vibeColorChips .vibe-chip');
+    chips.forEach((chip, index) => {
+        const colorValue = index === 0 ? primary : index === 1 ? secondary : accent;
+        chip.style.setProperty('--chip-color', colorValue);
+    });
+}
+
+function changeVibeTrack(delta) {
+    const songs = vibeState.data?.songs || [];
+    if (!songs.length) {
+        setVibeStatus('No songs available yet');
+        return;
+    }
+
+    const nextIndex = (vibeState.currentIndex + delta + songs.length) % songs.length;
+    startVibeTrack(nextIndex);
+}
+
+function toggleVibePlayback() {
+    if (vibeState.isPlaying) {
+        stopVibePlayback();
+    } else {
+        startVibeTrack(vibeState.currentIndex || 0);
+    }
+}
+
+function startVibeTrack(index) {
+    const songs = vibeState.data?.songs || [];
+    if (!songs.length) {
+        setVibeStatus('No songs available yet');
+        return;
+    }
+
+    const safeIndex = Math.max(0, Math.min(index, songs.length - 1));
+    const song = songs[safeIndex];
+    vibeState.currentIndex = safeIndex;
+
+    const title = document.getElementById('vibeTrackTitle');
+    const note = document.getElementById('vibeTrackNote');
+    const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+
+    if (title) {
+        const artist = song.artist ? ` — ${song.artist}` : '';
+        title.textContent = `${song.title || 'Untitled'}${artist}`;
+    }
+    if (note) {
+        note.textContent = song.mood_note || 'Playing from your milestone mix.';
+    }
+
+    const embedUrl = extractYouTubeEmbedUrl(song.youtube_url || '');
+    if (vibeState.playerFrame && embedUrl) {
+        vibeState.playerFrame.hidden = false;
+        vibeState.playerFrame.src = embedUrl;
+        vibeState.isPlaying = true;
+    } else {
+        vibeState.isPlaying = false;
+        setVibeStatus('Song link unavailable, try the next track.');
+    }
+
+    if (playPauseBtn) {
+        playPauseBtn.textContent = vibeState.isPlaying ? '❚❚' : '▶';
+    }
+}
+
+function stopVibePlayback() {
+    const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+    if (vibeState.playerFrame) {
+        vibeState.playerFrame.src = '';
+        vibeState.playerFrame.hidden = true;
+    }
+    vibeState.isPlaying = false;
+    if (playPauseBtn) {
+        playPauseBtn.textContent = '▶';
+    }
+}
+
+function updateVibeTrackDisplay() {
+    const songs = vibeState.data?.songs || [];
+    if (!songs.length) {
+        setVibeStatus('We will collect songs at your next milestone.');
+        return;
+    }
+
+    const current = songs[vibeState.currentIndex] || songs[0];
+    const title = document.getElementById('vibeTrackTitle');
+    const note = document.getElementById('vibeTrackNote');
+
+    if (title) {
+        const artist = current.artist ? ` — ${current.artist}` : '';
+        title.textContent = `${current.title || 'Untitled'}${artist}`;
+    }
+    if (note) {
+        note.textContent = current.mood_note || 'Press play to start the mix.';
+    }
+
+    const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+    if (playPauseBtn) {
+        playPauseBtn.textContent = vibeState.isPlaying ? '❚❚' : '▶';
+    }
+}
+
+function setVibeStatus(text) {
+    const note = document.getElementById('vibeTrackNote');
+    if (note && text) {
+        note.textContent = text;
+    }
+}
+
+function extractYouTubeEmbedUrl(url) {
+    if (!url) {
+        return null;
+    }
+
+    let videoId = null;
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname.includes('youtu.be')) {
+            videoId = parsed.pathname.replace('/', '');
+        } else {
+            videoId = parsed.searchParams.get('v');
+        }
+    } catch (error) {
+        // Ignore parsing errors
+    }
+
+    if (!videoId) {
+        return null;
+    }
+
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
 }
 
 // Tree management
@@ -321,6 +721,233 @@ window.addEventListener('popstate', () => {
     const view = params.get('view') || 'editor';
     activateWorkspaceTab(view, { updateHistory: false });
 });
+
+// Traditional outline notes (freeform nested plans)
+function initializeOutlineNotes() {
+    const outlineEntry = richTextEditors.outlineNotes;
+    const editor = document.getElementById('outlineNotesEditor');
+
+    if (!bookId) {
+        return;
+    }
+
+    if ((!outlineEntry || !outlineEntry.quill) && !editor) {
+        return;
+    }
+
+    const addBulletBtn = document.getElementById('outlineAddBullet');
+    const indentBtn = document.getElementById('outlineIndent');
+    const outdentBtn = document.getElementById('outlineOutdent');
+
+    if (outlineEntry?.quill) {
+        outlineEntry.quill.on('text-change', () => {
+            outlineNotesState.dirty = true;
+            setOutlineStatus('saving', 'Drafting…');
+            scheduleOutlineSave();
+        });
+    }
+
+    if (editor && !outlineEntry?.quill) {
+        editor.addEventListener('keydown', handleOutlineKeydown);
+        editor.addEventListener('input', () => {
+            outlineNotesState.dirty = true;
+            setOutlineStatus('saving', 'Drafting…');
+            scheduleOutlineSave();
+        });
+    }
+
+    if (addBulletBtn) {
+        addBulletBtn.addEventListener('click', insertOutlineBulletAtCursor);
+    }
+
+    if (indentBtn) {
+        indentBtn.addEventListener('click', () => adjustOutlineIndentation('indent'));
+    }
+
+    if (outdentBtn) {
+        outdentBtn.addEventListener('click', () => adjustOutlineIndentation('outdent'));
+    }
+
+    loadOutlineNotes();
+}
+
+function setOutlineStatus(state, message) {
+    const status = document.getElementById('outlineNotesStatus');
+    if (!status) {
+        return;
+    }
+
+    status.classList.remove('saving', 'error');
+    if (state) {
+        status.classList.add(state);
+    }
+    status.textContent = message;
+}
+
+function scheduleOutlineSave() {
+    clearTimeout(outlineNotesState.timer);
+    outlineNotesState.timer = setTimeout(saveOutlineNotes, 900);
+}
+
+async function loadOutlineNotes() {
+    outlineNotesState.ready = false;
+    setOutlineStatus('saving', 'Loading outline…');
+
+    try {
+        const response = await fetch(`api/get_outline_notes.php?book_id=${encodeURIComponent(bookId)}`);
+        const payload = await response.json();
+
+        if (!payload.success) {
+            throw new Error(payload.message || 'Unable to load outline');
+        }
+
+        setRichTextValue('outlineNotes', payload.outline || '', 'outlineNotesEditor');
+
+        outlineNotesState.ready = true;
+        outlineNotesState.dirty = false;
+        setOutlineStatus(null, 'Outline ready');
+    } catch (error) {
+        console.error('Failed to load outline notes', error);
+        setOutlineStatus('error', error.message || 'Failed to load outline');
+    }
+}
+
+async function saveOutlineNotes() {
+    if (!outlineNotesState.ready || outlineNotesState.saving || !outlineNotesState.dirty) {
+        return;
+    }
+
+    outlineNotesState.saving = true;
+    setOutlineStatus('saving', 'Saving…');
+
+    const outline = getRichTextValue('outlineNotes', 'outlineNotesEditor');
+
+    try {
+        const response = await fetch('api/save_outline_notes.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ book_id: bookId, outline })
+        });
+
+        const payload = await response.json();
+        if (!payload.success) {
+            throw new Error(payload.message || 'Unable to save outline');
+        }
+
+        outlineNotesState.dirty = false;
+        setOutlineStatus(null, 'Outline saved');
+    } catch (error) {
+        console.error('Failed to save outline notes', error);
+        setOutlineStatus('error', error.message || 'Failed to save outline');
+    } finally {
+        outlineNotesState.saving = false;
+    }
+}
+
+function handleOutlineKeydown(event) {
+    if (event.key === 'Tab') {
+        event.preventDefault();
+        const direction = event.shiftKey ? 'outdent' : 'indent';
+        adjustOutlineIndentation(direction);
+    }
+}
+
+function insertOutlineBulletAtCursor() {
+    const entry = richTextEditors.outlineNotes;
+    if (entry?.quill) {
+        const quill = entry.quill;
+        const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+        quill.formatLine(range.index, range.length || 1, { list: 'bullet' }, 'user');
+        quill.setSelection(range.index, 0, 'silent');
+        outlineNotesState.dirty = true;
+        setOutlineStatus('saving', 'Drafting…');
+        scheduleOutlineSave();
+        return;
+    }
+
+    const editor = document.getElementById('outlineNotesEditor');
+    if (!editor) {
+        return;
+    }
+
+    const value = editor.value;
+    const start = editor.selectionStart;
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const insertion = value.slice(0, lineStart) + '- ' + value.slice(lineStart);
+
+    editor.value = insertion;
+    const caretPosition = start + 2;
+    editor.setSelectionRange(caretPosition, caretPosition);
+    editor.focus();
+
+    outlineNotesState.dirty = true;
+    setOutlineStatus('saving', 'Drafting…');
+    scheduleOutlineSave();
+}
+
+function adjustOutlineIndentation(direction) {
+    const entry = richTextEditors.outlineNotes;
+    if (entry?.quill) {
+        const quill = entry.quill;
+        const selection = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+        const lines = quill.getLines(selection.index, selection.length || 1);
+
+        lines.forEach((line) => {
+            const lineIndex = quill.getIndex(line);
+            const formats = line.formats();
+            const currentIndent = formats.indent || 0;
+            const nextIndent = direction === 'indent'
+                ? currentIndent + 1
+                : Math.max(0, currentIndent - 1);
+
+            quill.formatLine(lineIndex, line.length(), 'indent', nextIndent === 0 ? false : nextIndent, 'user');
+        });
+
+        outlineNotesState.dirty = true;
+        setOutlineStatus('saving', 'Drafting…');
+        scheduleOutlineSave();
+        return;
+    }
+
+    const editor = document.getElementById('outlineNotesEditor');
+    if (!editor) {
+        return;
+    }
+
+    const value = editor.value;
+    const selectionStart = editor.selectionStart;
+    const selectionEnd = editor.selectionEnd;
+
+    const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+    const endOfSelectionLineBreak = value.indexOf('\n', selectionEnd);
+    const lineEnd = endOfSelectionLineBreak === -1 ? value.length : endOfSelectionLineBreak;
+
+    const segment = value.slice(lineStart, lineEnd);
+    const lines = segment.split('\n');
+
+    const updatedLines = lines.map((line) => {
+        if (direction === 'indent') {
+            return '    ' + line;
+        }
+
+        const trimmed = line.replace(/^( {1,4}|\t)/, '');
+        return trimmed;
+    });
+
+    const updatedSegment = updatedLines.join('\n');
+    const newValue = value.slice(0, lineStart) + updatedSegment + value.slice(lineEnd);
+    editor.value = newValue;
+
+    const delta = updatedSegment.length - segment.length;
+    const newStart = Math.max(0, selectionStart + delta);
+    const newEnd = Math.max(newStart, selectionEnd + delta);
+    editor.setSelectionRange(newStart, newEnd);
+    editor.focus();
+
+    outlineNotesState.dirty = true;
+    setOutlineStatus('saving', 'Drafting…');
+    scheduleOutlineSave();
+}
 
 // Binder <-> planning sync helpers
 function initializeBinderSelectionSync() {
@@ -1332,8 +1959,8 @@ function handleDictationResult(event) {
         return;
     }
 
-    const field = document.getElementById(dictationActiveTarget);
-    if (!field) {
+    const target = resolveDictationTarget(dictationActiveTarget);
+    if (!target) {
         return;
     }
 
@@ -1358,16 +1985,46 @@ function handleDictationResult(event) {
     }
 
     if (finalTranscript) {
-        insertDictationText(field, finalTranscript);
+        insertDictationText(target, finalTranscript);
     }
 }
 
-function insertDictationText(field, transcript) {
+function resolveDictationTarget(targetId) {
+    const key = targetId === 'contentEditor' ? 'content' : targetId;
+    const editorEntry = richTextEditors[key];
+
+    if (editorEntry?.quill) {
+        return { type: 'quill', quill: editorEntry.quill };
+    }
+
+    const field = editorEntry?.source || document.getElementById(targetId);
+    if (field) {
+        return { type: 'textarea', field };
+    }
+
+    return null;
+}
+
+function insertDictationText(target, transcript) {
     const cleanTranscript = transcript.trim();
     if (!cleanTranscript) {
         return;
     }
 
+    if (target.type === 'quill' && target.quill) {
+        const quill = target.quill;
+        const selection = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+        const beforeChar = quill.getText(Math.max(0, selection.index - 1), 1);
+        const needsLeadingSpace = beforeChar && !/\s/.test(beforeChar);
+        const insertion = `${needsLeadingSpace ? ' ' : ''}${cleanTranscript}`;
+
+        quill.insertText(selection.index, insertion, 'user');
+        quill.setSelection(selection.index + insertion.length, 0, 'silent');
+        quill.focus();
+        return;
+    }
+
+    const field = target.field;
     const selectionStart = typeof field.selectionStart === 'number' ? field.selectionStart : field.value.length;
     const selectionEnd = typeof field.selectionEnd === 'number' ? field.selectionEnd : field.value.length;
 

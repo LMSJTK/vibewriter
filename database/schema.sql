@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS books (
     genre VARCHAR(100),
     target_word_count INT DEFAULT 0,
     current_word_count INT DEFAULT 0,
+    last_vibe_milestone INT DEFAULT 0,
     cover_image VARCHAR(255),
     status ENUM('planning', 'drafting', 'revising', 'completed') DEFAULT 'planning',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -52,6 +53,31 @@ CREATE TABLE IF NOT EXISTS book_items (
     INDEX idx_parent_id (parent_id),
     INDEX idx_position (position),
     INDEX idx_type (item_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Freeform outline notes for each book (traditional outline separate from binder items)
+CREATE TABLE IF NOT EXISTS book_outline_notes (
+    book_id INT PRIMARY KEY,
+    outline_text LONGTEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
+    INDEX idx_outline_book_id (book_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Mood/color/mix data per book
+CREATE TABLE IF NOT EXISTS book_vibes (
+    book_id INT PRIMARY KEY,
+    summary VARCHAR(255),
+    milestone_label VARCHAR(100),
+    milestone_value INT DEFAULT 0,
+    color_primary VARCHAR(20),
+    color_secondary VARCHAR(20),
+    color_accent VARCHAR(20),
+    playlist_json LONGTEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
+    INDEX idx_vibes_book (book_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Metadata for book items (custom fields like POV, Setting, Subplot, etc.)
