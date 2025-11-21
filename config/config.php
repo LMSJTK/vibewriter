@@ -49,6 +49,9 @@ define('IMAGE_API_ENDPOINT', ''); // e.g., DALL-E, Midjourney, Stable Diffusion
 // Google Gemini API for image generation
 define('GEMINI_API_KEY', ''); // Add your Gemini API key here
 
+// YouTube Data API (for playlist lookups)
+define('YOUTUBE_API_KEY', '');
+
 // Google OAuth / service account configuration (optional, used when API keys are not supported)
 define('GOOGLE_SERVICE_ACCOUNT_EMAIL', '');
 define('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY', '');

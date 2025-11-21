@@ -3,6 +3,7 @@ require_once 'config/config.php';
 require_once 'includes/auth.php';
 require_once 'includes/books.php';
 require_once 'includes/book_items.php';
+require_once 'includes/vibes.php';
 require_once 'includes/tts_client.php';
 
 requireLogin();
@@ -22,6 +23,12 @@ if (!$book) {
 $items = getBookItems($bookId);
 $tree = buildTree($items);
 $aiVoiceConfig = getAIChatVoiceConfig();
+$bookVibe = getLatestBookVibe($bookId);
+$activePalette = $bookVibe['palette'] ?? [
+    'primary' => '#5b67ff',
+    'secondary' => '#0f172a',
+    'accent' => '#e0f2fe'
+];
 
 // Get current selected item
 $currentItemId = $_GET['item'] ?? null;
@@ -38,14 +45,14 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
     <link rel="stylesheet" href="assets/css/book.css">
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
 </head>
-<body>
+<body class="book-page<?php echo $bookVibe ? ' vibe-themed' : ''; ?>">
     <!-- Top Navbar -->
     <nav class="navbar">
         <div class="navbar-left">
             <a href="dashboard.php" class="back-link">← Dashboard</a>
             <div class="book-title">
                 <h1><?php echo h($book['title']); ?></h1>
-                <span class="word-count"><?php echo number_format($book['current_word_count']); ?> words</span>
+                <span class="word-count book-word-count"><?php echo number_format($book['current_word_count']); ?> words</span>
             </div>
         </div>
         <div class="navbar-right">
@@ -54,6 +61,30 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
             <button class="btn btn-sm" onclick="showExportModal()">📤 Export</button>
         </div>
     </nav>
+
+    <section class="book-vibe-banner" id="bookVibeBanner" data-book-id="<?php echo (int) $book['id']; ?>" style="--vibe-primary: <?php echo h($activePalette['primary']); ?>; --vibe-secondary: <?php echo h($activePalette['secondary']); ?>; --vibe-accent: <?php echo h($activePalette['accent']); ?>;">
+        <div class="vibe-summary">
+            <div class="vibe-eyebrow">Book vibe</div>
+            <p class="vibe-summary-text" id="vibeSummaryText"><?php echo h($bookVibe['summary'] ?? 'We’ll generate a vibe after your next milestone.'); ?></p>
+            <div class="vibe-colors" id="vibeColorChips">
+                <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['primary']); ?>" aria-label="Primary color"></span>
+                <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['secondary']); ?>" aria-label="Secondary color"></span>
+                <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['accent']); ?>" aria-label="Accent color"></span>
+            </div>
+            <div class="vibe-milestone" id="vibeMilestoneText"><?php echo h($bookVibe['milestone_label'] ?? 'Awaiting next milestone'); ?></div>
+        </div>
+        <div class="vibe-player" aria-live="polite">
+            <div class="vibe-track" id="vibeTrackTitle">No track selected</div>
+            <div class="vibe-track-note" id="vibeTrackNote">Hit play to start the vibe.</div>
+            <div class="vibe-player-controls">
+                <button type="button" class="icon-btn" id="vibePrevBtn" aria-label="Previous song">⏮</button>
+                <button type="button" class="icon-btn" id="vibePlayPauseBtn" aria-label="Play or pause">▶</button>
+                <button type="button" class="icon-btn" id="vibeNextBtn" aria-label="Next song">⏭</button>
+                <button type="button" class="btn btn-sm" id="refreshVibeButton">Refresh vibe</button>
+            </div>
+        </div>
+        <iframe id="vibePlayerFrame" title="Vibe media player" allow="autoplay" hidden></iframe>
+    </section>
 
     <div class="book-workspace">
         <!-- Left Sidebar: Binder (Hierarchical Structure) -->
@@ -91,7 +122,7 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
                             <h2><?php echo h($currentItem['title']); ?></h2>
                             <div class="item-meta">
                                 <span class="item-type"><?php echo h($currentItem['item_type']); ?></span>
-                                <span class="word-count"><?php echo number_format($currentItem['word_count']); ?> words</span>
+                                <span class="word-count item-word-count"><?php echo number_format($currentItem['word_count']); ?> words</span>
                                 <label class="sr-only" for="itemStatusSelect">Status</label>
                                 <select id="itemStatusSelect" class="status-select" onchange="updateItemStatus(<?php echo $currentItem['id']; ?>, this.value)">
                                     <option value="to_do" <?php echo $currentItem['status'] === 'to_do' ? 'selected' : ''; ?>>To Do</option>
@@ -372,6 +403,8 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
 
     <script>
         window.aiVoiceConfig = <?php echo json_encode($aiVoiceConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+        window.initialBookVibe = <?php echo json_encode($bookVibe, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+        window.currentBookId = <?php echo (int) $book['id']; ?>;
     </script>
     <script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
     <script src="assets/js/planning-utils.js"></script>

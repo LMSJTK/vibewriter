@@ -59,6 +59,14 @@ let dictationIsListening = false;
 let dictationActiveTarget = null;
 let dictationActiveButton = null;
 
+const vibeState = {
+    data: typeof window !== 'undefined' && window.initialBookVibe ? window.initialBookVibe : null,
+    currentIndex: 0,
+    isPlaying: false,
+    playerFrame: null,
+    refreshing: false
+};
+
 const globalAIVoiceConfig = typeof window !== 'undefined' && window.aiVoiceConfig ? window.aiVoiceConfig : {};
 const supportsAbortController = typeof AbortController === 'function';
 const aiVoiceVoices = Array.isArray(globalAIVoiceConfig.voices) ? globalAIVoiceConfig.voices : [];
@@ -168,6 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeOutlinerInteractions();
     initializePlanningViews();
     initializeOutlineNotes();
+    initializeBookVibe();
 
     if (Number.isFinite(planningState.selectedItemId)) {
         document.dispatchEvent(new CustomEvent('book:itemSelected', {
@@ -282,6 +291,15 @@ async function saveContent() {
             if (result.word_count !== undefined) {
                 updateWordCount(result.word_count);
             }
+            if (result.book_word_count !== undefined) {
+                updateBookWordCountDisplay(result.book_word_count);
+            }
+            if (result.vibe_needed) {
+                requestBookVibe({
+                    milestoneLabel: result.vibe_label,
+                    milestoneValue: result.vibe_value
+                });
+            }
         } else {
             showErrorIndicator();
         }
@@ -314,12 +332,271 @@ function showErrorIndicator() {
 }
 
 function updateWordCount(wordCount) {
-    const elements = document.querySelectorAll('.word-count');
+    const elements = document.querySelectorAll('.item-word-count');
     elements.forEach(el => {
-        if (el.closest('.item-meta')) {
-            el.textContent = `${wordCount.toLocaleString()} words`;
-        }
+        el.textContent = `${wordCount.toLocaleString()} words`;
     });
+}
+
+function updateBookWordCountDisplay(bookWordCount) {
+    const display = document.querySelector('.book-word-count');
+    if (!display || !Number.isFinite(bookWordCount)) {
+        return;
+    }
+    display.textContent = `${bookWordCount.toLocaleString()} words`;
+}
+
+// Book vibe helpers
+function initializeBookVibe() {
+    vibeState.playerFrame = document.getElementById('vibePlayerFrame');
+
+    const refreshButton = document.getElementById('refreshVibeButton');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', () => requestBookVibe({ force: true }));
+    }
+
+    const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+    const nextBtn = document.getElementById('vibeNextBtn');
+    const prevBtn = document.getElementById('vibePrevBtn');
+
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', toggleVibePlayback);
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => changeVibeTrack(1));
+    }
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => changeVibeTrack(-1));
+    }
+
+    if (vibeState.data) {
+        applyBookVibe(vibeState.data);
+    } else {
+        fetchBookVibe();
+    }
+}
+
+async function fetchBookVibe() {
+    if (!bookId) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`api/get_book_vibe.php?book_id=${bookId}`);
+        const result = await response.json();
+        if (result.success && result.vibe) {
+            applyBookVibe(result.vibe);
+        }
+    } catch (error) {
+        console.error('Failed to load book vibe', error);
+    }
+}
+
+async function requestBookVibe({ milestoneLabel = null, milestoneValue = null, force = false } = {}) {
+    if (!bookId || vibeState.refreshing) {
+        return;
+    }
+
+    vibeState.refreshing = true;
+    setVibeStatus('Requesting a fresh vibe...');
+
+    try {
+        const response = await fetch('api/request_book_vibe.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                book_id: bookId,
+                milestone_label: milestoneLabel,
+                milestone_value: milestoneValue,
+                force
+            })
+        });
+
+        const result = await response.json();
+        if (result.success && result.vibe) {
+            applyBookVibe(result.vibe);
+            setVibeStatus('Vibe updated');
+        } else if (!result.success) {
+            setVibeStatus(result.message || 'Could not update vibe');
+        }
+    } catch (error) {
+        console.error('Vibe request failed', error);
+        setVibeStatus('Vibe request failed');
+    } finally {
+        vibeState.refreshing = false;
+    }
+}
+
+function applyBookVibe(vibe) {
+    if (!vibe) {
+        return;
+    }
+
+    vibeState.data = vibe;
+    vibeState.currentIndex = 0;
+
+    applyVibePalette(vibe.palette || {});
+
+    const summary = document.getElementById('vibeSummaryText');
+    if (summary && vibe.summary) {
+        summary.textContent = vibe.summary;
+    }
+
+    const milestoneText = document.getElementById('vibeMilestoneText');
+    if (milestoneText && vibe.milestone_label) {
+        milestoneText.textContent = vibe.milestone_label;
+    }
+
+    updateVibeTrackDisplay();
+}
+
+function applyVibePalette(palette) {
+    const primary = palette.primary || '#5b67ff';
+    const secondary = palette.secondary || '#0f172a';
+    const accent = palette.accent || '#e0f2fe';
+
+    document.documentElement.style.setProperty('--vibe-primary', primary);
+    document.documentElement.style.setProperty('--vibe-secondary', secondary);
+    document.documentElement.style.setProperty('--vibe-accent', accent);
+    document.body.classList.add('vibe-themed');
+
+    const banner = document.getElementById('bookVibeBanner');
+    if (banner) {
+        banner.style.setProperty('--vibe-primary', primary);
+        banner.style.setProperty('--vibe-secondary', secondary);
+        banner.style.setProperty('--vibe-accent', accent);
+    }
+
+    const chips = document.querySelectorAll('#vibeColorChips .vibe-chip');
+    chips.forEach((chip, index) => {
+        const colorValue = index === 0 ? primary : index === 1 ? secondary : accent;
+        chip.style.setProperty('--chip-color', colorValue);
+    });
+}
+
+function changeVibeTrack(delta) {
+    const songs = vibeState.data?.songs || [];
+    if (!songs.length) {
+        setVibeStatus('No songs available yet');
+        return;
+    }
+
+    const nextIndex = (vibeState.currentIndex + delta + songs.length) % songs.length;
+    startVibeTrack(nextIndex);
+}
+
+function toggleVibePlayback() {
+    if (vibeState.isPlaying) {
+        stopVibePlayback();
+    } else {
+        startVibeTrack(vibeState.currentIndex || 0);
+    }
+}
+
+function startVibeTrack(index) {
+    const songs = vibeState.data?.songs || [];
+    if (!songs.length) {
+        setVibeStatus('No songs available yet');
+        return;
+    }
+
+    const safeIndex = Math.max(0, Math.min(index, songs.length - 1));
+    const song = songs[safeIndex];
+    vibeState.currentIndex = safeIndex;
+
+    const title = document.getElementById('vibeTrackTitle');
+    const note = document.getElementById('vibeTrackNote');
+    const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+
+    if (title) {
+        const artist = song.artist ? ` — ${song.artist}` : '';
+        title.textContent = `${song.title || 'Untitled'}${artist}`;
+    }
+    if (note) {
+        note.textContent = song.mood_note || 'Playing from your milestone mix.';
+    }
+
+    const embedUrl = extractYouTubeEmbedUrl(song.youtube_url || '');
+    if (vibeState.playerFrame && embedUrl) {
+        vibeState.playerFrame.hidden = false;
+        vibeState.playerFrame.src = embedUrl;
+        vibeState.isPlaying = true;
+    } else {
+        vibeState.isPlaying = false;
+        setVibeStatus('Song link unavailable, try the next track.');
+    }
+
+    if (playPauseBtn) {
+        playPauseBtn.textContent = vibeState.isPlaying ? '❚❚' : '▶';
+    }
+}
+
+function stopVibePlayback() {
+    const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+    if (vibeState.playerFrame) {
+        vibeState.playerFrame.src = '';
+        vibeState.playerFrame.hidden = true;
+    }
+    vibeState.isPlaying = false;
+    if (playPauseBtn) {
+        playPauseBtn.textContent = '▶';
+    }
+}
+
+function updateVibeTrackDisplay() {
+    const songs = vibeState.data?.songs || [];
+    if (!songs.length) {
+        setVibeStatus('We will collect songs at your next milestone.');
+        return;
+    }
+
+    const current = songs[vibeState.currentIndex] || songs[0];
+    const title = document.getElementById('vibeTrackTitle');
+    const note = document.getElementById('vibeTrackNote');
+
+    if (title) {
+        const artist = current.artist ? ` — ${current.artist}` : '';
+        title.textContent = `${current.title || 'Untitled'}${artist}`;
+    }
+    if (note) {
+        note.textContent = current.mood_note || 'Press play to start the mix.';
+    }
+
+    const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+    if (playPauseBtn) {
+        playPauseBtn.textContent = vibeState.isPlaying ? '❚❚' : '▶';
+    }
+}
+
+function setVibeStatus(text) {
+    const note = document.getElementById('vibeTrackNote');
+    if (note && text) {
+        note.textContent = text;
+    }
+}
+
+function extractYouTubeEmbedUrl(url) {
+    if (!url) {
+        return null;
+    }
+
+    let videoId = null;
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname.includes('youtu.be')) {
+            videoId = parsed.pathname.replace('/', '');
+        } else {
+            videoId = parsed.searchParams.get('v');
+        }
+    } catch (error) {
+        // Ignore parsing errors
+    }
+
+    if (!videoId) {
+        return null;
+    }
+
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
 }
 
 // Tree management
@@ -1710,6 +1987,8 @@ function handleDictationResult(event) {
     if (finalTranscript) {
         insertDictationText(target, finalTranscript);
     }
+
+    return null;
 }
 
 function resolveDictationTarget(targetId) {

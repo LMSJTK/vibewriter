@@ -1,4 +1,31 @@
 /* Book View Specific Styles */
+:root {
+    --vibe-primary: #5b67ff;
+    --vibe-secondary: #0f172a;
+    --vibe-accent: #e0f2fe;
+}
+
+body.vibe-themed .navbar {
+    background: linear-gradient(90deg, var(--vibe-primary), var(--vibe-secondary));
+    color: #f8fafc;
+}
+
+body.vibe-themed .navbar .back-link,
+body.vibe-themed .navbar .book-title h1,
+body.vibe-themed .navbar .book-title .word-count,
+body.vibe-themed .navbar .btn {
+    color: #f8fafc;
+}
+
+body.vibe-themed .workspace-tab.active {
+    background: var(--vibe-accent);
+    color: var(--vibe-secondary);
+    border-color: var(--vibe-primary);
+}
+
+body.vibe-themed .workspace-tab:hover {
+    background: rgba(255, 255, 255, 0.8);
+}
 
 .navbar-left {
     display: flex;
@@ -25,6 +52,105 @@
 .navbar-right {
     display: flex;
     gap: 10px;
+}
+
+.book-vibe-banner {
+    margin: 20px;
+    padding: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--vibe-accent), #ffffff);
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    gap: 18px;
+    align-items: center;
+}
+
+.vibe-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.vibe-eyebrow {
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--vibe-secondary);
+    font-weight: 700;
+}
+
+.vibe-summary-text {
+    margin: 0;
+    font-size: 15px;
+    color: #0f172a;
+}
+
+.vibe-colors {
+    display: flex;
+    gap: 6px;
+}
+
+.vibe-chip {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: var(--chip-color, var(--vibe-primary));
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.vibe-milestone {
+    font-size: 12px;
+    color: var(--vibe-secondary);
+    background: rgba(15, 23, 42, 0.06);
+    padding: 6px 10px;
+    border-radius: 6px;
+    display: inline-flex;
+    width: fit-content;
+}
+
+.vibe-player {
+    background: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.vibe-track {
+    font-weight: 700;
+    margin: 0 0 6px;
+    color: var(--vibe-secondary);
+}
+
+.vibe-track-note {
+    margin: 0 0 10px;
+    color: #475569;
+    font-size: 13px;
+    min-height: 18px;
+}
+
+.vibe-player-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vibe-player-controls .icon-btn {
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    background: var(--vibe-accent);
+    color: var(--vibe-secondary);
+}
+
+.vibe-player-controls .btn {
+    margin-left: auto;
+}
+
+#vibePlayerFrame {
+    width: 0;
+    height: 0;
+    border: 0;
 }
 
 /* Book Workspace Layout */

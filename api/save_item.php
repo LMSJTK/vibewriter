@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/book_items.php';
 require_once __DIR__ . '/../includes/books.php';
+require_once __DIR__ . '/../includes/vibes.php';
 
 header('Content-Type: application/json');
 
@@ -43,9 +44,16 @@ $result = updateBookItem($itemId, $bookId, [
 if ($result['success']) {
     // Get updated word count
     $item = getBookItem($itemId, $bookId);
+    $updatedBook = getBook($bookId, getCurrentUserId());
+    $milestone = detectVibeMilestone($updatedBook, $updatedBook['current_word_count'] ?? 0);
+
     jsonResponse([
         'success' => true,
-        'word_count' => $item['word_count']
+        'word_count' => $item['word_count'],
+        'book_word_count' => (int)($updatedBook['current_word_count'] ?? 0),
+        'vibe_needed' => (bool)$milestone,
+        'vibe_label' => $milestone['label'] ?? null,
+        'vibe_value' => $milestone['value'] ?? null
     ]);
 } else {
     jsonResponse(['success' => false, 'message' => $result['message']], 500);
