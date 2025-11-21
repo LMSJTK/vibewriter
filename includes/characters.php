@@ -328,11 +328,10 @@ function generateCharacterImage($character, $additionalPrompt = null) {
     $authMethod = null;
     $apiKey = defined('GEMINI_API_KEY') ? GEMINI_API_KEY : '';
     $accessToken = null;
+    $canUseServiceAccount = google_has_service_account_credentials();
 
-    if (!empty($apiKey)) {
-        $authMethod = 'api_key';
-    } elseif (google_has_service_account_credentials()) {
-        // Try using service account credentials when API key isn't provided
+    // Prefer OAuth for image generation because some Gemini endpoints reject API keys
+    if ($canUseServiceAccount) {
         $tokenResult = get_google_service_account_token(
             defined('GOOGLE_GEMINI_IMAGE_SCOPES') ? GOOGLE_GEMINI_IMAGE_SCOPES : null,
             'gemini-image'
@@ -344,6 +343,8 @@ function generateCharacterImage($character, $additionalPrompt = null) {
 
         $accessToken = $tokenResult['token'];
         $authMethod = 'oauth';
+    } elseif (!empty($apiKey)) {
+        $authMethod = 'api_key';
     } else {
         return ['success' => false, 'message' => 'Gemini API credentials not configured'];
     }
@@ -391,35 +392,62 @@ function generateCharacterImage($character, $additionalPrompt = null) {
     ];
 
     $headers = ['Content-Type: application/json'];
+    $attempts = [];
+
+    $makeRequest = function ($requestUrl, $requestHeaders) use ($data) {
+        $ch = curl_init($requestUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
+
+        $response = curl_exec($ch);
+        $errorMessage = $response === false ? curl_error($ch) : null;
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return [$response, $httpCode, $errorMessage];
+    };
+
     if ($authMethod === 'oauth') {
-        $headers[] = 'Authorization: Bearer ' . $accessToken;
+        $headersWithAuth = array_merge($headers, ['Authorization: Bearer ' . $accessToken]);
+        [$response, $httpCode, $errorMessage] = $makeRequest($url, $headersWithAuth);
+        $attempts[] = ['method' => 'oauth', 'http_code' => $httpCode, 'response' => $response, 'error' => $errorMessage];
+    } else {
+        [$response, $httpCode, $errorMessage] = $makeRequest($url, $headers);
+        $attempts[] = ['method' => 'api_key', 'http_code' => $httpCode, 'response' => $response, 'error' => $errorMessage];
+
+        // If API keys are rejected and we have service account credentials, retry with OAuth
+        $apiKeyRejected = $httpCode === 401 && strpos((string)$response, 'API keys are not supported') !== false;
+        if ($apiKeyRejected && $canUseServiceAccount) {
+            $tokenResult = get_google_service_account_token(
+                defined('GOOGLE_GEMINI_IMAGE_SCOPES') ? GOOGLE_GEMINI_IMAGE_SCOPES : null,
+                'gemini-image',
+                true
+            );
+
+            if ($tokenResult['success']) {
+                $accessToken = $tokenResult['token'];
+                $headersWithAuth = array_merge($headers, ['Authorization: Bearer ' . $accessToken]);
+                [$response, $httpCode, $errorMessage] = $makeRequest($baseUrl, $headersWithAuth);
+                $attempts[] = ['method' => 'oauth-retry', 'http_code' => $httpCode, 'response' => $response, 'error' => $errorMessage];
+            }
+        }
     }
-
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-    $response = curl_exec($ch);
 
     if ($response === false) {
-        $errorMessage = curl_error($ch);
-        curl_close($ch);
         return [
             'success' => false,
-            'message' => 'Gemini API request failed: ' . $errorMessage
+            'message' => 'Gemini API request failed: ' . ($errorMessage ?? 'Unknown error')
         ];
     }
-
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($httpCode !== 200) {
         return [
             'success' => false,
             'message' => 'Gemini API request failed with status code: ' . $httpCode,
-            'response' => $response
+            'response' => $response,
+            'attempts' => $attempts
         ];
     }
 
