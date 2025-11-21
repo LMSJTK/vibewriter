@@ -27,6 +27,13 @@ const planningParentKeyFor = typeof PlanningUtils.parentKeyFor === 'function'
 let activeWorkspaceView = initialWorkspaceView;
 let planningStatusTimer = null;
 
+const outlineNotesState = {
+    ready: false,
+    dirty: false,
+    saving: false,
+    timer: null,
+};
+
 const planningState = {
     ready: false,
     itemsById: {},
@@ -74,6 +81,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeBinderSelectionSync();
     initializeOutlinerInteractions();
     initializePlanningViews();
+    initializeOutlineNotes();
 
     if (Number.isFinite(planningState.selectedItemId)) {
         document.dispatchEvent(new CustomEvent('book:itemSelected', {
@@ -321,6 +329,184 @@ window.addEventListener('popstate', () => {
     const view = params.get('view') || 'editor';
     activateWorkspaceTab(view, { updateHistory: false });
 });
+
+// Traditional outline notes (freeform nested plans)
+function initializeOutlineNotes() {
+    const editor = document.getElementById('outlineNotesEditor');
+    if (!editor || !bookId) {
+        return;
+    }
+
+    const addBulletBtn = document.getElementById('outlineAddBullet');
+    const indentBtn = document.getElementById('outlineIndent');
+    const outdentBtn = document.getElementById('outlineOutdent');
+
+    editor.addEventListener('keydown', handleOutlineKeydown);
+    editor.addEventListener('input', () => {
+        outlineNotesState.dirty = true;
+        setOutlineStatus('saving', 'Drafting…');
+        scheduleOutlineSave();
+    });
+
+    if (addBulletBtn) {
+        addBulletBtn.addEventListener('click', insertOutlineBulletAtCursor);
+    }
+
+    if (indentBtn) {
+        indentBtn.addEventListener('click', () => adjustOutlineIndentation('indent'));
+    }
+
+    if (outdentBtn) {
+        outdentBtn.addEventListener('click', () => adjustOutlineIndentation('outdent'));
+    }
+
+    loadOutlineNotes();
+}
+
+function setOutlineStatus(state, message) {
+    const status = document.getElementById('outlineNotesStatus');
+    if (!status) {
+        return;
+    }
+
+    status.classList.remove('saving', 'error');
+    if (state) {
+        status.classList.add(state);
+    }
+    status.textContent = message;
+}
+
+function scheduleOutlineSave() {
+    clearTimeout(outlineNotesState.timer);
+    outlineNotesState.timer = setTimeout(saveOutlineNotes, 900);
+}
+
+async function loadOutlineNotes() {
+    outlineNotesState.ready = false;
+    setOutlineStatus('saving', 'Loading outline…');
+
+    try {
+        const response = await fetch(`api/get_outline_notes.php?book_id=${encodeURIComponent(bookId)}`);
+        const payload = await response.json();
+
+        if (!payload.success) {
+            throw new Error(payload.message || 'Unable to load outline');
+        }
+
+        const editor = document.getElementById('outlineNotesEditor');
+        if (editor) {
+            editor.value = payload.outline || '';
+        }
+
+        outlineNotesState.ready = true;
+        outlineNotesState.dirty = false;
+        setOutlineStatus(null, 'Outline ready');
+    } catch (error) {
+        console.error('Failed to load outline notes', error);
+        setOutlineStatus('error', error.message || 'Failed to load outline');
+    }
+}
+
+async function saveOutlineNotes() {
+    const editor = document.getElementById('outlineNotesEditor');
+    if (!editor || !outlineNotesState.ready || outlineNotesState.saving || !outlineNotesState.dirty) {
+        return;
+    }
+
+    outlineNotesState.saving = true;
+    setOutlineStatus('saving', 'Saving…');
+
+    try {
+        const response = await fetch('api/save_outline_notes.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ book_id: bookId, outline: editor.value })
+        });
+
+        const payload = await response.json();
+        if (!payload.success) {
+            throw new Error(payload.message || 'Unable to save outline');
+        }
+
+        outlineNotesState.dirty = false;
+        setOutlineStatus(null, 'Outline saved');
+    } catch (error) {
+        console.error('Failed to save outline notes', error);
+        setOutlineStatus('error', error.message || 'Failed to save outline');
+    } finally {
+        outlineNotesState.saving = false;
+    }
+}
+
+function handleOutlineKeydown(event) {
+    if (event.key === 'Tab') {
+        event.preventDefault();
+        const direction = event.shiftKey ? 'outdent' : 'indent';
+        adjustOutlineIndentation(direction);
+    }
+}
+
+function insertOutlineBulletAtCursor() {
+    const editor = document.getElementById('outlineNotesEditor');
+    if (!editor) {
+        return;
+    }
+
+    const value = editor.value;
+    const start = editor.selectionStart;
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const insertion = value.slice(0, lineStart) + '- ' + value.slice(lineStart);
+
+    editor.value = insertion;
+    const caretPosition = start + 2;
+    editor.setSelectionRange(caretPosition, caretPosition);
+    editor.focus();
+
+    outlineNotesState.dirty = true;
+    setOutlineStatus('saving', 'Drafting…');
+    scheduleOutlineSave();
+}
+
+function adjustOutlineIndentation(direction) {
+    const editor = document.getElementById('outlineNotesEditor');
+    if (!editor) {
+        return;
+    }
+
+    const value = editor.value;
+    const selectionStart = editor.selectionStart;
+    const selectionEnd = editor.selectionEnd;
+
+    const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+    const endOfSelectionLineBreak = value.indexOf('\n', selectionEnd);
+    const lineEnd = endOfSelectionLineBreak === -1 ? value.length : endOfSelectionLineBreak;
+
+    const segment = value.slice(lineStart, lineEnd);
+    const lines = segment.split('\n');
+
+    const updatedLines = lines.map((line) => {
+        if (direction === 'indent') {
+            return '    ' + line;
+        }
+
+        const trimmed = line.replace(/^( {1,4}|\t)/, '');
+        return trimmed;
+    });
+
+    const updatedSegment = updatedLines.join('\n');
+    const newValue = value.slice(0, lineStart) + updatedSegment + value.slice(lineEnd);
+    editor.value = newValue;
+
+    const delta = updatedSegment.length - segment.length;
+    const newStart = Math.max(0, selectionStart + delta);
+    const newEnd = Math.max(newStart, selectionEnd + delta);
+    editor.setSelectionRange(newStart, newEnd);
+    editor.focus();
+
+    outlineNotesState.dirty = true;
+    setOutlineStatus('saving', 'Drafting…');
+    scheduleOutlineSave();
+}
 
 // Binder <-> planning sync helpers
 function initializeBinderSelectionSync() {

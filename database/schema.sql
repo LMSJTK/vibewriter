@@ -54,6 +54,15 @@ CREATE TABLE IF NOT EXISTS book_items (
     INDEX idx_type (item_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Freeform outline notes for each book (traditional outline separate from binder items)
+CREATE TABLE IF NOT EXISTS book_outline_notes (
+    book_id INT PRIMARY KEY,
+    outline_text LONGTEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
+    INDEX idx_outline_book_id (book_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Metadata for book items (custom fields like POV, Setting, Subplot, etc.)
 CREATE TABLE IF NOT EXISTS item_metadata (
     id INT AUTO_INCREMENT PRIMARY KEY,

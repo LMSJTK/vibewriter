@@ -123,12 +123,13 @@ Then update `config/database.php` with your credentials.
 - **Notes**: Ideas, reminders, and planning documents
 - **Research**: Reference materials and background information
 
-### Planning Workspace (Corkboard & Outliner)
+### Planning Workspace (Corkboard, Outliner & Notes)
 
 1. Open a book and use the tabs above the editor to switch between **Editor**, **Corkboard**, and **Outliner** views.
 2. On the **Corkboard**, drag cards or use the keyboard handle (focus the ⋮⋮ button and press arrow keys) to reorder scenes. Drops are saved instantly and reflected in the binder.
 3. The **Outliner** lists the same items in a table. Click column headers to sort, edit titles or POV inline, and update status with the dropdown — changes auto-save via existing endpoints.
 4. Selecting a card or row updates the binder/editor selection so your writing, planning, and metadata always stay in sync.
+5. Use **Outline Notes** for a traditional nested outline. Press Tab/Shift+Tab (or the toolbar buttons) to indent/outdent bullets, and jot down freeform beats or questions that auto-save as you type.
 
 ### Version Control with Snapshots
 

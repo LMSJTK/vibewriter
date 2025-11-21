@@ -615,6 +615,59 @@
     margin-top: 12px;
 }
 
+.outline-notes-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0 4px;
+    flex-wrap: wrap;
+}
+
+.outline-notes-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.outline-notes-status {
+    font-size: 13px;
+    color: var(--gray);
+}
+
+.outline-notes-status.saving {
+    color: var(--primary-color);
+}
+
+.outline-notes-status.error {
+    color: #b42318;
+}
+
+.outline-notes-editor-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.outline-notes-editor {
+    width: 100%;
+    min-height: 360px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    background: #fff;
+    resize: vertical;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.outline-notes-editor:focus {
+    outline: 3px solid rgba(35, 95, 212, 0.2);
+    border-color: var(--primary-color);
+}
+
 .corkboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

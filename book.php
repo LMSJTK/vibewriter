@@ -80,6 +80,7 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
                 <button type="button" class="workspace-tab" id="workspaceTab-editor" role="tab" aria-controls="editorPanel" aria-selected="true" data-view="editor">✍️ Editor</button>
                 <button type="button" class="workspace-tab" id="workspaceTab-corkboard" role="tab" aria-controls="corkboardPanel" aria-selected="false" data-view="corkboard">🗂️ Corkboard</button>
                 <button type="button" class="workspace-tab" id="workspaceTab-outliner" role="tab" aria-controls="outlinerPanel" aria-selected="false" data-view="outliner">📋 Outliner</button>
+                <button type="button" class="workspace-tab" id="workspaceTab-outlineNotes" role="tab" aria-controls="outlineNotesPanel" aria-selected="false" data-view="outline-notes">📝 Outline Notes</button>
             </div>
 
             <section id="editorPanel" class="workspace-panel" role="tabpanel" aria-labelledby="workspaceTab-editor" data-view="editor">
@@ -181,6 +182,32 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
                         </thead>
                         <tbody id="outlinerTableBody"></tbody>
                     </table>
+                </div>
+            </section>
+
+            <section id="outlineNotesPanel" class="workspace-panel planning-pane outline-notes-pane" role="tabpanel" aria-labelledby="workspaceTab-outlineNotes" data-view="outline-notes" hidden>
+                <div class="planning-onboarding">
+                    <h3>Traditional outline</h3>
+                    <p>Draft a nested outline for your story, character arcs, or beats. Use it as a scratchpad for you and your AI writing partner.</p>
+                    <ul class="quick-tips">
+                        <li>Use Tab / Shift+Tab (or the toolbar buttons) to indent and outdent lines.</li>
+                        <li>Start lines with “-” or “•” to create bullets; mix in notes, dialogue beats, or questions.</li>
+                        <li>Everything autosaves, so you can outline freely without losing momentum.</li>
+                    </ul>
+                </div>
+
+                <div class="outline-notes-toolbar" aria-live="polite">
+                    <div class="outline-notes-actions">
+                        <button type="button" class="btn btn-sm" id="outlineAddBullet">＋ Bullet</button>
+                        <button type="button" class="btn btn-sm" id="outlineIndent">↳ Indent</button>
+                        <button type="button" class="btn btn-sm" id="outlineOutdent">↰ Outdent</button>
+                    </div>
+                    <div class="outline-notes-status" id="outlineNotesStatus" aria-live="polite">Loading outline…</div>
+                </div>
+
+                <div class="outline-notes-editor-wrap">
+                    <label class="sr-only" for="outlineNotesEditor">Outline notes editor</label>
+                    <textarea id="outlineNotesEditor" class="outline-notes-editor" placeholder="Type your outline here. Press Tab to indent nested beats or Shift+Tab to outdent."></textarea>
                 </div>
             </section>
 
