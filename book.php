@@ -36,6 +36,7 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
     <title><?php echo h($book['title']); ?> - VibeWriter</title>
     <link rel="stylesheet" href="assets/css/main.css">
     <link rel="stylesheet" href="assets/css/book.css">
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
 </head>
 <body>
     <!-- Top Navbar -->
@@ -109,19 +110,58 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
 
                     <div class="synopsis-section">
                         <label for="synopsis">Synopsis:</label>
-                        <textarea class="synopsis-input" id="synopsis" placeholder="Brief summary of this section..."><?php echo h($currentItem['synopsis']); ?></textarea>
+                        <div class="richtext-wrapper">
+                            <div id="synopsisToolbar" class="quill-toolbar" aria-label="Synopsis formatting toolbar">
+                                <span class="ql-formats">
+                                    <button class="ql-bold" aria-label="Bold"></button>
+                                    <button class="ql-italic" aria-label="Italic"></button>
+                                    <button class="ql-underline" aria-label="Underline"></button>
+                                </span>
+                                <span class="ql-formats">
+                                    <button class="ql-list" value="bullet" aria-label="Bulleted list"></button>
+                                </span>
+                            </div>
+                            <div id="synopsisEditor" class="quill-editor synopsis-editor" aria-label="Synopsis editor"></div>
+                            <textarea class="synopsis-input richtext-source" id="synopsis" placeholder="Brief summary of this section..." aria-label="Synopsis fallback editor"><?php echo h($currentItem['synopsis']); ?></textarea>
+                        </div>
                     </div>
 
-                    <div class="dictation-toolbar">
-                        <div class="dictation-controls">
-                            <button type="button" class="btn btn-sm dictation-btn" data-target="synopsis" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Synopsis</button>
-                            <button type="button" class="btn btn-sm dictation-btn" data-target="contentEditor" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Content</button>
+                        <div class="dictation-toolbar">
+                            <div class="dictation-controls">
+                                <button type="button" class="btn btn-sm dictation-btn" data-target="synopsis" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Synopsis</button>
+                                <button type="button" class="btn btn-sm dictation-btn" data-target="content" data-status-target="dictationStatus" data-status-idle="Voice ready">🎙️ Dictate Content</button>
+                            </div>
+                            <div class="dictation-status" id="dictationStatus" data-default-text="Voice ready">Voice ready</div>
                         </div>
-                        <div class="dictation-status" id="dictationStatus" data-default-text="Voice ready">Voice ready</div>
-                    </div>
 
                     <div class="editor-section">
-                        <textarea class="content-editor" id="contentEditor" placeholder="Start writing..."><?php echo h($currentItem['content']); ?></textarea>
+                        <div id="contentToolbar" class="quill-toolbar" aria-label="Content formatting toolbar">
+                            <span class="ql-formats">
+                                <select class="ql-header" aria-label="Heading">
+                                    <option selected></option>
+                                    <option value="2">Heading 1</option>
+                                    <option value="3">Heading 2</option>
+                                </select>
+                            </span>
+                            <span class="ql-formats">
+                                <button class="ql-bold" aria-label="Bold"></button>
+                                <button class="ql-italic" aria-label="Italic"></button>
+                                <button class="ql-underline" aria-label="Underline"></button>
+                                <button class="ql-strike" aria-label="Strikethrough"></button>
+                            </span>
+                            <span class="ql-formats">
+                                <button class="ql-list" value="ordered" aria-label="Numbered list"></button>
+                                <button class="ql-list" value="bullet" aria-label="Bulleted list"></button>
+                                <button class="ql-blockquote" aria-label="Block quote"></button>
+                                <button class="ql-code-block" aria-label="Code block"></button>
+                            </span>
+                            <span class="ql-formats">
+                                <button class="ql-link" aria-label="Insert link"></button>
+                                <button class="ql-clean" aria-label="Clear formatting"></button>
+                            </span>
+                        </div>
+                        <div id="contentEditorRich" class="quill-editor content-editor" aria-label="Content editor"></div>
+                        <textarea class="content-editor richtext-source" id="contentEditor" placeholder="Start writing..." aria-label="Content fallback editor"><?php echo h($currentItem['content']); ?></textarea>
                     </div>
 
                     <div class="save-indicator" id="saveIndicator">
@@ -207,7 +247,25 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
 
                 <div class="outline-notes-editor-wrap">
                     <label class="sr-only" for="outlineNotesEditor">Outline notes editor</label>
-                    <textarea id="outlineNotesEditor" class="outline-notes-editor" placeholder="Type your outline here. Press Tab to indent nested beats or Shift+Tab to outdent."></textarea>
+                    <div id="outlineNotesToolbar" class="quill-toolbar" aria-label="Outline formatting toolbar">
+                        <span class="ql-formats">
+                            <button class="ql-list" value="bullet" aria-label="Bulleted list"></button>
+                            <button class="ql-list" value="ordered" aria-label="Numbered list"></button>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-indent" value="-1" aria-label="Outdent"></button>
+                            <button class="ql-indent" value="+1" aria-label="Indent"></button>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-bold" aria-label="Bold"></button>
+                            <button class="ql-italic" aria-label="Italic"></button>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-clean" aria-label="Clear formatting"></button>
+                        </span>
+                    </div>
+                    <div id="outlineNotesQuill" class="quill-editor outline-notes-editor" aria-label="Outline notes editor"></div>
+                    <textarea id="outlineNotesEditor" class="outline-notes-editor richtext-source" placeholder="Type your outline here. Press Tab to indent nested beats or Shift+Tab to outdent." aria-label="Outline notes fallback editor"></textarea>
                 </div>
             </section>
 
@@ -315,6 +373,7 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
     <script>
         window.aiVoiceConfig = <?php echo json_encode($aiVoiceConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
     </script>
+    <script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
     <script src="assets/js/planning-utils.js"></script>
     <script src="assets/js/book.js"></script>
 </body>
