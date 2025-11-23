@@ -58,33 +58,64 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
         <div class="navbar-right">
             <button class="btn btn-sm" onclick="toggleAIChat()">💬 AI Assistant</button>
             <button class="btn btn-sm" onclick="showCharactersPanel()">👥 Characters</button>
+            <button class="btn btn-sm" onclick="toggleVibePanel()">🎵 Vibe</button>
             <button class="btn btn-sm" onclick="showExportModal()">📤 Export</button>
         </div>
     </nav>
 
-    <section class="book-vibe-banner" id="bookVibeBanner" data-book-id="<?php echo (int) $book['id']; ?>" style="--vibe-primary: <?php echo h($activePalette['primary']); ?>; --vibe-secondary: <?php echo h($activePalette['secondary']); ?>; --vibe-accent: <?php echo h($activePalette['accent']); ?>;">
-        <div class="vibe-summary">
-            <div class="vibe-eyebrow">Book vibe</div>
-            <p class="vibe-summary-text" id="vibeSummaryText"><?php echo h($bookVibe['summary'] ?? 'We’ll generate a vibe after your next milestone.'); ?></p>
-            <div class="vibe-colors" id="vibeColorChips">
-                <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['primary']); ?>" aria-label="Primary color"></span>
-                <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['secondary']); ?>" aria-label="Secondary color"></span>
-                <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['accent']); ?>" aria-label="Accent color"></span>
-            </div>
-            <div class="vibe-milestone" id="vibeMilestoneText"><?php echo h($bookVibe['milestone_label'] ?? 'Awaiting next milestone'); ?></div>
+    <!-- Minimal Persistent Music Controls -->
+    <div class="mini-vibe-controls" id="miniVibeControls">
+        <button type="button" class="mini-vibe-btn" id="miniVibePrevBtn" title="Previous" aria-label="Previous song">⏮</button>
+        <button type="button" class="mini-vibe-btn mini-vibe-play" id="miniVibePlayPauseBtn" title="Play/Pause" aria-label="Play or pause">▶</button>
+        <button type="button" class="mini-vibe-btn" id="miniVibeNextBtn" title="Next" aria-label="Next song">⏭</button>
+        <div class="mini-vibe-track" id="miniVibeTrackTitle">No track</div>
+    </div>
+
+    <!-- Vibe Panel (Collapsible) -->
+    <aside class="vibe-panel" id="vibePanel">
+        <div class="vibe-panel-header">
+            <h3>Book Vibe</h3>
+            <button class="close-btn" onclick="toggleVibePanel()">×</button>
         </div>
-        <div class="vibe-player" aria-live="polite">
-            <div class="vibe-track" id="vibeTrackTitle">No track selected</div>
-            <div class="vibe-track-note" id="vibeTrackNote">Hit play to start the vibe.</div>
-            <div class="vibe-player-controls">
-                <button type="button" class="icon-btn" id="vibePrevBtn" aria-label="Previous song">⏮</button>
-                <button type="button" class="icon-btn" id="vibePlayPauseBtn" aria-label="Play or pause">▶</button>
-                <button type="button" class="icon-btn" id="vibeNextBtn" aria-label="Next song">⏭</button>
-                <button type="button" class="btn btn-sm" id="refreshVibeButton">Refresh vibe</button>
-            </div>
+
+        <div class="vibe-panel-content">
+            <section class="vibe-summary-section" data-book-id="<?php echo (int) $book['id']; ?>" style="--vibe-primary: <?php echo h($activePalette['primary']); ?>; --vibe-secondary: <?php echo h($activePalette['secondary']); ?>; --vibe-accent: <?php echo h($activePalette['accent']); ?>;">
+                <div class="vibe-eyebrow">Current Vibe</div>
+                <p class="vibe-summary-text" id="vibeSummaryText"><?php echo h($bookVibe['summary'] ?? 'We'll generate a vibe after your next milestone.'); ?></p>
+
+                <div class="vibe-colors-group">
+                    <label>Color Palette</label>
+                    <div class="vibe-colors" id="vibeColorChips">
+                        <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['primary']); ?>" aria-label="Primary color"></span>
+                        <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['secondary']); ?>" aria-label="Secondary color"></span>
+                        <span class="vibe-chip" style="--chip-color: <?php echo h($activePalette['accent']); ?>" aria-label="Accent color"></span>
+                    </div>
+                </div>
+
+                <div class="vibe-milestone">
+                    <label>Milestone</label>
+                    <div id="vibeMilestoneText"><?php echo h($bookVibe['milestone_label'] ?? 'Awaiting next milestone'); ?></div>
+                </div>
+            </section>
+
+            <section class="vibe-player-section" aria-live="polite">
+                <div class="vibe-track-info">
+                    <div class="vibe-track" id="vibeTrackTitle">No track selected</div>
+                    <div class="vibe-track-note" id="vibeTrackNote">Hit play to start the vibe.</div>
+                </div>
+
+                <div class="vibe-player-controls">
+                    <button type="button" class="icon-btn" id="vibePrevBtn" aria-label="Previous song">⏮</button>
+                    <button type="button" class="icon-btn vibe-play-large" id="vibePlayPauseBtn" aria-label="Play or pause">▶</button>
+                    <button type="button" class="icon-btn" id="vibeNextBtn" aria-label="Next song">⏭</button>
+                </div>
+
+                <button type="button" class="btn btn-block" id="refreshVibeButton">Refresh Vibe</button>
+            </section>
         </div>
+
         <iframe id="vibePlayerFrame" title="Vibe media player" allow="autoplay" hidden></iframe>
-    </section>
+    </aside>
 
     <div class="book-workspace">
         <!-- Left Sidebar: Binder (Hierarchical Structure) -->
