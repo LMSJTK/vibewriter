@@ -2528,9 +2528,80 @@ async function createSnapshot(itemId) {
 }
 
 // AI Chat
+let conversationHistoryLoaded = false;
+
 function toggleAIChat() {
     const sidebar = document.getElementById('aiChatSidebar');
+    const wasActive = sidebar.classList.contains('active');
     sidebar.classList.toggle('active');
+
+    // Load conversation history when opening chat for the first time
+    if (!wasActive && !conversationHistoryLoaded) {
+        loadConversationHistory();
+    }
+}
+
+async function loadConversationHistory() {
+    if (!bookId) return;
+
+    const messagesContainer = document.getElementById('aiChatMessages');
+
+    // Show loading indicator
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'ai-message';
+    loadingDiv.innerHTML = `
+        <div class="ai-avatar">🤖</div>
+        <div class="message-content">Loading conversation history...</div>
+    `;
+    messagesContainer.appendChild(loadingDiv);
+
+    try {
+        const response = await fetch(`api/get_ai_conversations.php?book_id=${bookId}&limit=50`);
+        const result = await response.json();
+
+        // Remove loading indicator
+        loadingDiv.remove();
+
+        if (result.success && result.conversations && result.conversations.length > 0) {
+            // Clear the welcome message and any existing content
+            messagesContainer.innerHTML = '';
+
+            // Add each historical conversation pair
+            result.conversations.forEach(conv => {
+                // Add user message
+                const userMessageDiv = document.createElement('div');
+                userMessageDiv.className = 'user-message';
+                userMessageDiv.innerHTML = `
+                    <div class="user-avatar">👤</div>
+                    <div class="message-content">${escapeHtml(conv.message)}</div>
+                `;
+                messagesContainer.appendChild(userMessageDiv);
+
+                // Add AI response
+                const aiMessageDiv = document.createElement('div');
+                aiMessageDiv.className = 'ai-message';
+                const formattedResponse = escapeHtml(conv.response).replace(/\n/g, '<br>');
+                aiMessageDiv.innerHTML = `
+                    <div class="ai-avatar">🤖</div>
+                    <div class="message-content">${formattedResponse}</div>
+                `;
+                messagesContainer.appendChild(aiMessageDiv);
+            });
+
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        } else {
+            // No history found - loading indicator already removed, welcome message stays
+            loadingDiv.remove();
+        }
+
+        conversationHistoryLoaded = true;
+    } catch (error) {
+        console.error('Failed to load conversation history:', error);
+        loadingDiv.remove();
+        // Don't show error to user, just log it and keep welcome message
+        conversationHistoryLoaded = true; // Mark as loaded to prevent retries
+    }
 }
 
 async function sendAIMessage() {
@@ -2586,6 +2657,28 @@ async function sendAIMessage() {
                 showCharacterUpdateNotification(
                     result.characters_created || [],
                     result.characters_updated || []
+                );
+            }
+
+            // Show notification if locations were created or updated
+            const hasLocsCreated = result.locations_created && result.locations_created.length > 0;
+            const hasLocsUpdated = result.locations_updated && result.locations_updated.length > 0;
+
+            if (hasLocsCreated || hasLocsUpdated) {
+                showLocationUpdateNotification(
+                    result.locations_created || [],
+                    result.locations_updated || []
+                );
+            }
+
+            // Show notification if plot threads were created or updated
+            const hasThreadsCreated = result.plot_threads_created && result.plot_threads_created.length > 0;
+            const hasThreadsUpdated = result.plot_threads_updated && result.plot_threads_updated.length > 0;
+
+            if (hasThreadsCreated || hasThreadsUpdated) {
+                showPlotThreadUpdateNotification(
+                    result.plot_threads_created || [],
+                    result.plot_threads_updated || []
                 );
             }
         } else {
@@ -2820,6 +2913,138 @@ function showCharacterUpdateNotification(createdCharacters, updatedCharacters) {
             padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
+        ">Dismiss</button>
+    `;
+
+    document.body.appendChild(notification);
+
+    // Auto-dismiss after 15 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.style.animation = 'slideIn 0.3s ease-out reverse';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 15000);
+}
+
+// Show location update notification
+function showLocationUpdateNotification(createdLocations, updatedLocations) {
+    // Remove existing notification if any
+    const existing = document.getElementById('locationUpdateNotification');
+    if (existing) {
+        existing.remove();
+    }
+
+    // Build message based on what changed
+    let messages = [];
+    if (createdLocations.length > 0) {
+        const locList = createdLocations.map(loc => loc.name).join(', ');
+        messages.push(`<strong>Created:</strong> ${locList}`);
+    }
+    if (updatedLocations.length > 0) {
+        const locList = updatedLocations.map(loc => {
+            const fields = loc.updated_fields.join(', ');
+            return `${loc.name} (${fields})`;
+        }).join(', ');
+        messages.push(`<strong>Updated:</strong> ${locList}`);
+    }
+
+    // Create notification banner
+    const notification = document.createElement('div');
+    notification.id = 'locationUpdateNotification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 180px;
+        right: 20px;
+        background: #8b5cf6;
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        max-width: 400px;
+        animation: slideIn 0.3s ease-out;
+    `;
+
+    notification.innerHTML = `
+        <div style="margin-bottom: 10px;">
+            <strong>📍 Locations Updated</strong><br>
+            <small>${messages.join('<br>')}</small>
+        </div>
+        <button onclick="this.parentElement.remove()" style="
+            background: white;
+            color: #8b5cf6;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        ">Dismiss</button>
+    `;
+
+    document.body.appendChild(notification);
+
+    // Auto-dismiss after 15 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.style.animation = 'slideIn 0.3s ease-out reverse';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 15000);
+}
+
+// Show plot thread update notification
+function showPlotThreadUpdateNotification(createdThreads, updatedThreads) {
+    // Remove existing notification if any
+    const existing = document.getElementById('plotThreadUpdateNotification');
+    if (existing) {
+        existing.remove();
+    }
+
+    // Build message based on what changed
+    let messages = [];
+    if (createdThreads.length > 0) {
+        const threadList = createdThreads.map(thread => `${thread.title} (${thread.type})`).join(', ');
+        messages.push(`<strong>Created:</strong> ${threadList}`);
+    }
+    if (updatedThreads.length > 0) {
+        const threadList = updatedThreads.map(thread => {
+            const fields = thread.updated_fields.join(', ');
+            return `${thread.title} (${fields})`;
+        }).join(', ');
+        messages.push(`<strong>Updated:</strong> ${threadList}`);
+    }
+
+    // Create notification banner
+    const notification = document.createElement('div');
+    notification.id = 'plotThreadUpdateNotification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 240px;
+        right: 20px;
+        background: #f59e0b;
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        max-width: 400px;
+        animation: slideIn 0.3s ease-out;
+    `;
+
+    notification.innerHTML = `
+        <div style="margin-bottom: 10px;">
+            <strong>🧵 Plot Threads Updated</strong><br>
+            <small>${messages.join('<br>')}</small>
+        </div>
+        <button onclick="this.parentElement.remove()" style="
+            background: white;
+            color: #f59e0b;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
         ">Dismiss</button>
     `;
 
