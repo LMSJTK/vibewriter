@@ -81,7 +81,7 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
         <div class="vibe-panel-content">
             <section class="vibe-summary-section" data-book-id="<?php echo (int) $book['id']; ?>" style="--vibe-primary: <?php echo h($activePalette['primary']); ?>; --vibe-secondary: <?php echo h($activePalette['secondary']); ?>; --vibe-accent: <?php echo h($activePalette['accent']); ?>;">
                 <div class="vibe-eyebrow">Current Vibe</div>
-                <p class="vibe-summary-text" id="vibeSummaryText"><?php echo h($bookVibe['summary'] ?? 'We'll generate a vibe after your next milestone.'); ?></p>
+                <p class="vibe-summary-text" id="vibeSummaryText"><?php echo h($bookVibe['summary'] ?? 'We\'ll generate a vibe after your next milestone.'); ?></p>
 
                 <div class="vibe-colors-group">
                     <label>Color Palette</label>
