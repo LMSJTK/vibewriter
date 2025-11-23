@@ -355,6 +355,7 @@ function initializeBookVibe() {
         refreshButton.addEventListener('click', () => requestBookVibe({ force: true }));
     }
 
+    // Main vibe controls
     const playPauseBtn = document.getElementById('vibePlayPauseBtn');
     const nextBtn = document.getElementById('vibeNextBtn');
     const prevBtn = document.getElementById('vibePrevBtn');
@@ -367,6 +368,21 @@ function initializeBookVibe() {
     }
     if (prevBtn) {
         prevBtn.addEventListener('click', () => changeVibeTrack(-1));
+    }
+
+    // Mini vibe controls
+    const miniPlayPauseBtn = document.getElementById('miniVibePlayPauseBtn');
+    const miniNextBtn = document.getElementById('miniVibeNextBtn');
+    const miniPrevBtn = document.getElementById('miniVibePrevBtn');
+
+    if (miniPlayPauseBtn) {
+        miniPlayPauseBtn.addEventListener('click', toggleVibePlayback);
+    }
+    if (miniNextBtn) {
+        miniNextBtn.addEventListener('click', () => changeVibeTrack(1));
+    }
+    if (miniPrevBtn) {
+        miniPrevBtn.addEventListener('click', () => changeVibeTrack(-1));
     }
 
     if (vibeState.data) {
@@ -508,12 +524,19 @@ function startVibeTrack(index) {
     const note = document.getElementById('vibeTrackNote');
     const playPauseBtn = document.getElementById('vibePlayPauseBtn');
 
+    // Update main track info
     if (title) {
         const artist = song.artist ? ` — ${song.artist}` : '';
         title.textContent = `${song.title || 'Untitled'}${artist}`;
     }
     if (note) {
         note.textContent = song.mood_note || 'Playing from your milestone mix.';
+    }
+
+    // Update mini track info
+    const miniTrackTitle = document.getElementById('miniVibeTrackTitle');
+    if (miniTrackTitle) {
+        miniTrackTitle.textContent = song.title || 'No track';
     }
 
     const embedUrl = extractYouTubeEmbedUrl(song.youtube_url || '');
@@ -526,20 +549,32 @@ function startVibeTrack(index) {
         setVibeStatus('Song link unavailable, try the next track.');
     }
 
+    // Update both play/pause buttons
+    const miniPlayPauseBtn = document.getElementById('miniVibePlayPauseBtn');
     if (playPauseBtn) {
         playPauseBtn.textContent = vibeState.isPlaying ? '❚❚' : '▶';
+    }
+    if (miniPlayPauseBtn) {
+        miniPlayPauseBtn.textContent = vibeState.isPlaying ? '❚❚' : '▶';
     }
 }
 
 function stopVibePlayback() {
     const playPauseBtn = document.getElementById('vibePlayPauseBtn');
+    const miniPlayPauseBtn = document.getElementById('miniVibePlayPauseBtn');
+
     if (vibeState.playerFrame) {
         vibeState.playerFrame.src = '';
         vibeState.playerFrame.hidden = true;
     }
     vibeState.isPlaying = false;
+
+    // Update both play/pause buttons
     if (playPauseBtn) {
         playPauseBtn.textContent = '▶';
+    }
+    if (miniPlayPauseBtn) {
+        miniPlayPauseBtn.textContent = '▶';
     }
 }
 
@@ -2539,6 +2574,12 @@ function toggleAIChat() {
     if (!wasActive && !conversationHistoryLoaded) {
         loadConversationHistory();
     }
+}
+
+// Vibe Panel Toggle
+function toggleVibePanel() {
+    const panel = document.getElementById('vibePanel');
+    panel.classList.toggle('active');
 }
 
 async function loadConversationHistory() {
