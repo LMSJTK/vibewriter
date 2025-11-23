@@ -56,12 +56,17 @@ $context = buildAIContext($book, $itemId);
 
 // Call AI model
 try {
-    // Track if any items or characters were created or updated
+    // Track if any items, characters, locations, or plot threads were created or updated
     global $createdItems, $updatedItems, $createdCharacters, $updatedCharacters;
+    global $createdLocations, $updatedLocations, $createdPlotThreads, $updatedPlotThreads;
     $createdItems = [];
     $updatedItems = [];
     $createdCharacters = [];
     $updatedCharacters = [];
+    $createdLocations = [];
+    $updatedLocations = [];
+    $createdPlotThreads = [];
+    $updatedPlotThreads = [];
 
     $response = callAIWithTools($message, $context, $bookId, $itemId);
 
@@ -74,7 +79,11 @@ try {
         'items_created' => !empty($createdItems) ? $createdItems : null,
         'items_updated' => !empty($updatedItems) ? $updatedItems : null,
         'characters_created' => !empty($createdCharacters) ? $createdCharacters : null,
-        'characters_updated' => !empty($updatedCharacters) ? $updatedCharacters : null
+        'characters_updated' => !empty($updatedCharacters) ? $updatedCharacters : null,
+        'locations_created' => !empty($createdLocations) ? $createdLocations : null,
+        'locations_updated' => !empty($updatedLocations) ? $updatedLocations : null,
+        'plot_threads_created' => !empty($createdPlotThreads) ? $createdPlotThreads : null,
+        'plot_threads_updated' => !empty($updatedPlotThreads) ? $updatedPlotThreads : null
     ]);
 } catch (Exception $e) {
     // Log detailed error for debugging
@@ -355,11 +364,15 @@ function getAIWritingTools() {
                         ],
                         'status' => [
                             'type' => 'string',
-                            'description' => 'New status (e.g., "draft", "in_progress", "complete") (optional)'
+                            'description' => 'New status (e.g., "to_do", "in_progress", "done", "revised") (optional)'
                         ],
                         'label' => [
                             'type' => 'string',
                             'description' => 'New label/tag for the item (optional)'
+                        ],
+                        'metadata' => [
+                            'type' => 'object',
+                            'description' => 'Custom metadata fields like POV, Setting, Subplot, etc. Each key-value pair will be stored (optional)'
                         ]
                     ],
                     'required' => ['item_id']
@@ -528,6 +541,210 @@ function getAIWritingTools() {
                     ],
                     'required' => ['character_id']
                 ]
+            ],
+            [
+                'name' => 'read_locations',
+                'description' => 'Reads all locations/settings in the book. Use this to see what locations have been created.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => new stdClass()
+                ]
+            ],
+            [
+                'name' => 'read_location',
+                'description' => 'Reads detailed information about a specific location including description, atmosphere, and significance.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'location_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the location to read'
+                        ]
+                    ],
+                    'required' => ['location_id']
+                ]
+            ],
+            [
+                'name' => 'create_location',
+                'description' => 'Creates a new location/setting when first mentioned or discussed. Use this to add locations to the book\'s worldbuilding database.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'name' => [
+                            'type' => 'string',
+                            'description' => 'The location\'s name'
+                        ],
+                        'description' => [
+                            'type' => 'string',
+                            'description' => 'Physical description of the location'
+                        ],
+                        'atmosphere' => [
+                            'type' => 'string',
+                            'description' => 'The mood, feeling, or atmosphere of this location'
+                        ],
+                        'significance' => [
+                            'type' => 'string',
+                            'description' => 'Why this location is important to the story'
+                        ],
+                        'notes' => [
+                            'type' => 'string',
+                            'description' => 'Additional notes about this location'
+                        ]
+                    ],
+                    'required' => ['name']
+                ]
+            ],
+            [
+                'name' => 'update_location',
+                'description' => 'Updates location information as new details are discussed or revealed. Use this to add or modify location details.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'location_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the location to update'
+                        ],
+                        'name' => [
+                            'type' => 'string',
+                            'description' => 'Updated name (optional)'
+                        ],
+                        'description' => [
+                            'type' => 'string',
+                            'description' => 'Updated physical description (optional)'
+                        ],
+                        'atmosphere' => [
+                            'type' => 'string',
+                            'description' => 'Updated atmosphere/mood (optional)'
+                        ],
+                        'significance' => [
+                            'type' => 'string',
+                            'description' => 'Updated significance to story (optional)'
+                        ],
+                        'notes' => [
+                            'type' => 'string',
+                            'description' => 'Updated notes (optional)'
+                        ]
+                    ],
+                    'required' => ['location_id']
+                ]
+            ],
+            [
+                'name' => 'delete_location',
+                'description' => 'Deletes a location from the book. Use this carefully when the user wants to remove a location.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'location_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the location to delete'
+                        ]
+                    ],
+                    'required' => ['location_id']
+                ]
+            ],
+            [
+                'name' => 'read_plot_threads',
+                'description' => 'Reads all plot threads (main plots, subplots, character arcs) in the book. Use this to see what storylines are being tracked.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => new stdClass()
+                ]
+            ],
+            [
+                'name' => 'read_plot_thread',
+                'description' => 'Reads detailed information about a specific plot thread including its description, type, and resolution status.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'thread_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the plot thread to read'
+                        ]
+                    ],
+                    'required' => ['thread_id']
+                ]
+            ],
+            [
+                'name' => 'create_plot_thread',
+                'description' => 'Creates a new plot thread to track a main plot, subplot, or character arc. Use this to organize story threads.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'title' => [
+                            'type' => 'string',
+                            'description' => 'The title of this plot thread'
+                        ],
+                        'description' => [
+                            'type' => 'string',
+                            'description' => 'Description of what happens in this plot thread'
+                        ],
+                        'thread_type' => [
+                            'type' => 'string',
+                            'enum' => ['main', 'subplot', 'character_arc'],
+                            'description' => 'The type of plot thread: main, subplot, or character_arc'
+                        ],
+                        'status' => [
+                            'type' => 'string',
+                            'enum' => ['open', 'resolved'],
+                            'description' => 'Whether this thread is still open or resolved (default: open)'
+                        ],
+                        'color' => [
+                            'type' => 'string',
+                            'description' => 'Hex color for visual distinction (e.g., #FF5733)'
+                        ]
+                    ],
+                    'required' => ['title']
+                ]
+            ],
+            [
+                'name' => 'update_plot_thread',
+                'description' => 'Updates a plot thread as the story develops. Use this to modify thread details or mark threads as resolved.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'thread_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the plot thread to update'
+                        ],
+                        'title' => [
+                            'type' => 'string',
+                            'description' => 'Updated title (optional)'
+                        ],
+                        'description' => [
+                            'type' => 'string',
+                            'description' => 'Updated description (optional)'
+                        ],
+                        'thread_type' => [
+                            'type' => 'string',
+                            'enum' => ['main', 'subplot', 'character_arc'],
+                            'description' => 'Updated type (optional)'
+                        ],
+                        'status' => [
+                            'type' => 'string',
+                            'enum' => ['open', 'resolved'],
+                            'description' => 'Updated status (optional)'
+                        ],
+                        'color' => [
+                            'type' => 'string',
+                            'description' => 'Updated color (optional)'
+                        ]
+                    ],
+                    'required' => ['thread_id']
+                ]
+            ],
+            [
+                'name' => 'delete_plot_thread',
+                'description' => 'Deletes a plot thread from the book. Use this carefully when the user wants to remove a storyline.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'thread_id' => [
+                            'type' => 'number',
+                            'description' => 'The ID of the plot thread to delete'
+                        ]
+                    ],
+                    'required' => ['thread_id']
+                ]
             ]
         ];
     }
@@ -575,6 +792,36 @@ function handleToolUse($toolUse, $bookId, $itemId) {
 
         case 'delete_character':
             return deleteCharacterFromAI($input, $bookId);
+
+        case 'read_locations':
+            return readLocationsFromAI($bookId, $input);
+
+        case 'read_location':
+            return readLocationFromAI($input, $bookId);
+
+        case 'create_location':
+            return createLocationFromAI($input, $bookId);
+
+        case 'update_location':
+            return updateLocationFromAI($input, $bookId);
+
+        case 'delete_location':
+            return deleteLocationFromAI($input, $bookId);
+
+        case 'read_plot_threads':
+            return readPlotThreadsFromAI($bookId, $input);
+
+        case 'read_plot_thread':
+            return readPlotThreadFromAI($input, $bookId);
+
+        case 'create_plot_thread':
+            return createPlotThreadFromAI($input, $bookId);
+
+        case 'update_plot_thread':
+            return updatePlotThreadFromAI($input, $bookId);
+
+        case 'delete_plot_thread':
+            return deletePlotThreadFromAI($input, $bookId);
 
         default:
             return ['success' => false, 'error' => 'Unknown tool: ' . $toolName];
@@ -764,35 +1011,50 @@ function updateBinderItemFromAI($input, $bookId) {
             }
         }
 
-        if (empty($updateData)) {
+        // Handle metadata updates
+        $metadataUpdated = false;
+        if (isset($input['metadata']) && is_array($input['metadata'])) {
+            foreach ($input['metadata'] as $key => $value) {
+                setItemMetadata($itemId, $key, $value);
+                $metadataUpdated = true;
+            }
+        }
+
+        if (empty($updateData) && !$metadataUpdated) {
             return ['success' => false, 'error' => 'No fields to update'];
         }
 
-        // Update the item
-        $result = updateBookItem($itemId, $bookId, $updateData);
+        // Update the item (if there are standard fields to update)
+        if (!empty($updateData)) {
+            $result = updateBookItem($itemId, $bookId, $updateData);
 
-        // Log the result
-        error_log("Update item result: " . json_encode($result));
+            // Log the result
+            error_log("Update item result: " . json_encode($result));
 
-        if ($result['success']) {
-            // Track updated items globally
-            global $updatedItems;
-            $updatedItems[] = [
-                'item_id' => $itemId,
-                'title' => $updateData['title'] ?? $item['title'],
-                'updated_fields' => array_keys($updateData)
-            ];
-
-            $updatedFields = implode(', ', array_keys($updateData));
-            return [
-                'success' => true,
-                'item_id' => $itemId,
-                'updated_fields' => array_keys($updateData),
-                'message' => "Updated item '{$item['title']}': $updatedFields"
-            ];
-        } else {
-            return ['success' => false, 'error' => $result['message'] ?? 'Failed to update item'];
+            if (!$result['success']) {
+                return ['success' => false, 'error' => $result['message'] ?? 'Failed to update item'];
+            }
         }
+
+        // Track updated items globally
+        global $updatedItems;
+        $updatedFields = array_keys($updateData);
+        if ($metadataUpdated) {
+            $updatedFields[] = 'metadata';
+        }
+        $updatedItems[] = [
+            'item_id' => $itemId,
+            'title' => $updateData['title'] ?? $item['title'],
+            'updated_fields' => $updatedFields
+        ];
+
+        $updatedFieldsStr = implode(', ', $updatedFields);
+        return [
+            'success' => true,
+            'item_id' => $itemId,
+            'updated_fields' => $updatedFields,
+            'message' => "Updated item '{$item['title']}': $updatedFieldsStr"
+        ];
     } catch (Exception $e) {
         return ['success' => false, 'error' => $e->getMessage()];
     }
@@ -1087,6 +1349,448 @@ function deleteCharacterFromAI($input, $bookId) {
             ];
         } else {
             return ['success' => false, 'error' => $result['message'] ?? 'Failed to delete character'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Read all locations from AI request
+ */
+function readLocationsFromAI($bookId, $input) {
+    require_once __DIR__ . '/../includes/locations.php';
+
+    try {
+        $locations = getLocations($bookId);
+
+        // Format for AI consumption
+        $formattedLocations = array_map(function($loc) {
+            return [
+                'id' => $loc['id'],
+                'name' => $loc['name'],
+                'description' => $loc['description'],
+                'atmosphere' => $loc['atmosphere'],
+                'significance' => $loc['significance']
+            ];
+        }, $locations);
+
+        return [
+            'success' => true,
+            'locations' => $formattedLocations,
+            'total_count' => count($locations),
+            'message' => 'Retrieved ' . count($locations) . ' locations'
+        ];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Read a single location from AI request
+ */
+function readLocationFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/locations.php';
+
+    try {
+        $locationId = $input['location_id'] ?? null;
+
+        if (!$locationId) {
+            return ['success' => false, 'error' => 'Location ID is required'];
+        }
+
+        $location = getLocation($locationId, $bookId);
+
+        if (!$location) {
+            return ['success' => false, 'error' => 'Location not found'];
+        }
+
+        return [
+            'success' => true,
+            'location' => [
+                'id' => $location['id'],
+                'name' => $location['name'],
+                'description' => $location['description'],
+                'atmosphere' => $location['atmosphere'],
+                'significance' => $location['significance'],
+                'notes' => $location['notes']
+            ],
+            'message' => "Retrieved location: {$location['name']}"
+        ];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Create a location from AI request
+ */
+function createLocationFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/locations.php';
+
+    try {
+        $name = $input['name'] ?? '';
+
+        if (empty($name)) {
+            return ['success' => false, 'error' => 'Location name is required'];
+        }
+
+        // Build location data
+        $locationData = [
+            'name' => $name,
+            'description' => $input['description'] ?? '',
+            'atmosphere' => $input['atmosphere'] ?? '',
+            'significance' => $input['significance'] ?? '',
+            'notes' => $input['notes'] ?? ''
+        ];
+
+        // Create the location
+        $result = createLocation($bookId, $locationData);
+
+        if ($result['success']) {
+            $locationId = $result['location_id'];
+
+            // Track created locations globally
+            global $createdLocations;
+            if (!isset($createdLocations)) {
+                $createdLocations = [];
+            }
+            $createdLocations[] = [
+                'location_id' => $locationId,
+                'name' => $name
+            ];
+
+            return [
+                'success' => true,
+                'location_id' => $locationId,
+                'name' => $name,
+                'message' => "Created location: $name"
+            ];
+        } else {
+            return ['success' => false, 'error' => 'Failed to create location'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Update a location from AI request
+ */
+function updateLocationFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/locations.php';
+
+    try {
+        $locationId = $input['location_id'] ?? null;
+
+        if (!$locationId) {
+            return ['success' => false, 'error' => 'Location ID is required'];
+        }
+
+        // Verify location exists
+        $location = getLocation($locationId, $bookId);
+        if (!$location) {
+            return ['success' => false, 'error' => 'Location not found'];
+        }
+
+        // Build update data
+        $updateData = [];
+        $allowedFields = ['name', 'description', 'atmosphere', 'significance', 'notes'];
+
+        foreach ($allowedFields as $field) {
+            if (isset($input[$field])) {
+                $updateData[$field] = $input[$field];
+            }
+        }
+
+        if (empty($updateData)) {
+            return ['success' => false, 'error' => 'No fields to update'];
+        }
+
+        // Update the location
+        $result = updateLocation($locationId, $bookId, $updateData);
+
+        if ($result['success']) {
+            // Track updated locations globally
+            global $updatedLocations;
+            if (!isset($updatedLocations)) {
+                $updatedLocations = [];
+            }
+            $updatedLocations[] = [
+                'location_id' => $locationId,
+                'name' => $updateData['name'] ?? $location['name'],
+                'updated_fields' => array_keys($updateData)
+            ];
+
+            $updatedFields = implode(', ', array_keys($updateData));
+            return [
+                'success' => true,
+                'location_id' => $locationId,
+                'updated_fields' => array_keys($updateData),
+                'message' => "Updated location '{$location['name']}': $updatedFields"
+            ];
+        } else {
+            return ['success' => false, 'error' => $result['message'] ?? 'Failed to update location'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Delete a location from AI request
+ */
+function deleteLocationFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/locations.php';
+
+    try {
+        $locationId = $input['location_id'] ?? null;
+
+        if (!$locationId) {
+            return ['success' => false, 'error' => 'Location ID is required'];
+        }
+
+        // Get location details before deletion
+        $location = getLocation($locationId, $bookId);
+        if (!$location) {
+            return ['success' => false, 'error' => 'Location not found'];
+        }
+
+        $locationName = $location['name'];
+
+        // Delete the location
+        $result = deleteLocation($locationId, $bookId);
+
+        if ($result['success']) {
+            return [
+                'success' => true,
+                'location_id' => $locationId,
+                'message' => "Deleted location: $locationName"
+            ];
+        } else {
+            return ['success' => false, 'error' => $result['message'] ?? 'Failed to delete location'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Read all plot threads from AI request
+ */
+function readPlotThreadsFromAI($bookId, $input) {
+    require_once __DIR__ . '/../includes/plot_threads.php';
+
+    try {
+        $threads = getPlotThreads($bookId);
+
+        // Format for AI consumption
+        $formattedThreads = array_map(function($thread) {
+            return [
+                'id' => $thread['id'],
+                'title' => $thread['title'],
+                'description' => $thread['description'],
+                'thread_type' => $thread['thread_type'],
+                'status' => $thread['status'],
+                'color' => $thread['color']
+            ];
+        }, $threads);
+
+        return [
+            'success' => true,
+            'plot_threads' => $formattedThreads,
+            'total_count' => count($threads),
+            'message' => 'Retrieved ' . count($threads) . ' plot threads'
+        ];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Read a single plot thread from AI request
+ */
+function readPlotThreadFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/plot_threads.php';
+
+    try {
+        $threadId = $input['thread_id'] ?? null;
+
+        if (!$threadId) {
+            return ['success' => false, 'error' => 'Thread ID is required'];
+        }
+
+        $thread = getPlotThread($threadId, $bookId);
+
+        if (!$thread) {
+            return ['success' => false, 'error' => 'Plot thread not found'];
+        }
+
+        return [
+            'success' => true,
+            'plot_thread' => [
+                'id' => $thread['id'],
+                'title' => $thread['title'],
+                'description' => $thread['description'],
+                'thread_type' => $thread['thread_type'],
+                'status' => $thread['status'],
+                'color' => $thread['color']
+            ],
+            'message' => "Retrieved plot thread: {$thread['title']}"
+        ];
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Create a plot thread from AI request
+ */
+function createPlotThreadFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/plot_threads.php';
+
+    try {
+        $title = $input['title'] ?? '';
+
+        if (empty($title)) {
+            return ['success' => false, 'error' => 'Plot thread title is required'];
+        }
+
+        // Build thread data
+        $threadData = [
+            'title' => $title,
+            'description' => $input['description'] ?? '',
+            'thread_type' => $input['thread_type'] ?? 'subplot',
+            'status' => $input['status'] ?? 'open',
+            'color' => $input['color'] ?? null
+        ];
+
+        // Create the thread
+        $result = createPlotThread($bookId, $threadData);
+
+        if ($result['success']) {
+            $threadId = $result['thread_id'];
+
+            // Track created threads globally
+            global $createdPlotThreads;
+            if (!isset($createdPlotThreads)) {
+                $createdPlotThreads = [];
+            }
+            $createdPlotThreads[] = [
+                'thread_id' => $threadId,
+                'title' => $title,
+                'type' => $threadData['thread_type']
+            ];
+
+            return [
+                'success' => true,
+                'thread_id' => $threadId,
+                'title' => $title,
+                'message' => "Created plot thread: $title ({$threadData['thread_type']})"
+            ];
+        } else {
+            return ['success' => false, 'error' => 'Failed to create plot thread'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Update a plot thread from AI request
+ */
+function updatePlotThreadFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/plot_threads.php';
+
+    try {
+        $threadId = $input['thread_id'] ?? null;
+
+        if (!$threadId) {
+            return ['success' => false, 'error' => 'Thread ID is required'];
+        }
+
+        // Verify thread exists
+        $thread = getPlotThread($threadId, $bookId);
+        if (!$thread) {
+            return ['success' => false, 'error' => 'Plot thread not found'];
+        }
+
+        // Build update data
+        $updateData = [];
+        $allowedFields = ['title', 'description', 'thread_type', 'status', 'color'];
+
+        foreach ($allowedFields as $field) {
+            if (isset($input[$field])) {
+                $updateData[$field] = $input[$field];
+            }
+        }
+
+        if (empty($updateData)) {
+            return ['success' => false, 'error' => 'No fields to update'];
+        }
+
+        // Update the thread
+        $result = updatePlotThread($threadId, $bookId, $updateData);
+
+        if ($result['success']) {
+            // Track updated threads globally
+            global $updatedPlotThreads;
+            if (!isset($updatedPlotThreads)) {
+                $updatedPlotThreads = [];
+            }
+            $updatedPlotThreads[] = [
+                'thread_id' => $threadId,
+                'title' => $updateData['title'] ?? $thread['title'],
+                'updated_fields' => array_keys($updateData)
+            ];
+
+            $updatedFields = implode(', ', array_keys($updateData));
+            return [
+                'success' => true,
+                'thread_id' => $threadId,
+                'updated_fields' => array_keys($updateData),
+                'message' => "Updated plot thread '{$thread['title']}': $updatedFields"
+            ];
+        } else {
+            return ['success' => false, 'error' => $result['message'] ?? 'Failed to update plot thread'];
+        }
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * Delete a plot thread from AI request
+ */
+function deletePlotThreadFromAI($input, $bookId) {
+    require_once __DIR__ . '/../includes/plot_threads.php';
+
+    try {
+        $threadId = $input['thread_id'] ?? null;
+
+        if (!$threadId) {
+            return ['success' => false, 'error' => 'Thread ID is required'];
+        }
+
+        // Get thread details before deletion
+        $thread = getPlotThread($threadId, $bookId);
+        if (!$thread) {
+            return ['success' => false, 'error' => 'Plot thread not found'];
+        }
+
+        $threadTitle = $thread['title'];
+
+        // Delete the thread
+        $result = deletePlotThread($threadId, $bookId);
+
+        if ($result['success']) {
+            return [
+                'success' => true,
+                'thread_id' => $threadId,
+                'message' => "Deleted plot thread: $threadTitle"
+            ];
+        } else {
+            return ['success' => false, 'error' => $result['message'] ?? 'Failed to delete plot thread'];
         }
     } catch (Exception $e) {
         return ['success' => false, 'error' => $e->getMessage()];

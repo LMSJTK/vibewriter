@@ -79,6 +79,46 @@ function buildAIContext($book, $itemId) {
     $context .= "10. delete_character - Remove a character\n";
     $context .= "   Required: character_id (number)\n\n";
 
+    $context .= "LOCATION MANAGEMENT TOOLS:\n\n";
+
+    $context .= "11. read_locations - See all locations/settings in the book\n";
+    $context .= "   Use this to check what locations already exist\n\n";
+
+    $context .= "12. read_location - Get full details about a specific location\n";
+    $context .= "   Required: location_id (number)\n\n";
+
+    $context .= "13. create_location - Create a new location when first mentioned\n";
+    $context .= "   Required: name (string)\n";
+    $context .= "   Optional: description, atmosphere, significance, notes\n";
+    $context .= "   Example: When user mentions 'the dark tavern', immediately call create_location\n\n";
+
+    $context .= "14. update_location - Add details to an existing location\n";
+    $context .= "   Required: location_id (number)\n";
+    $context .= "   Optional: Any location field (name, description, atmosphere, etc.)\n\n";
+
+    $context .= "15. delete_location - Remove a location\n";
+    $context .= "   Required: location_id (number)\n\n";
+
+    $context .= "PLOT THREAD MANAGEMENT TOOLS:\n\n";
+
+    $context .= "16. read_plot_threads - See all plot threads (main plots, subplots, character arcs)\n";
+    $context .= "   Use this to check what storylines are being tracked\n\n";
+
+    $context .= "17. read_plot_thread - Get full details about a specific plot thread\n";
+    $context .= "   Required: thread_id (number)\n\n";
+
+    $context .= "18. create_plot_thread - Create a new plot thread to track storylines\n";
+    $context .= "   Required: title (string)\n";
+    $context .= "   Optional: description, thread_type (main/subplot/character_arc), status (open/resolved), color\n";
+    $context .= "   Example: User says 'track the romance subplot' → create_plot_thread with title='Romance Subplot', thread_type='subplot'\n\n";
+
+    $context .= "19. update_plot_thread - Update a plot thread (mark as resolved, add details)\n";
+    $context .= "   Required: thread_id (number)\n";
+    $context .= "   Optional: Any thread field (title, description, status, etc.)\n\n";
+
+    $context .= "20. delete_plot_thread - Remove a plot thread\n";
+    $context .= "   Required: thread_id (number)\n\n";
+
     $context .= "=== ACTION WORKFLOW ===\n";
     $context .= "BINDER ITEMS:\n";
     $context .= "1. If user says 'update the title of X to Y' → Immediately call update_binder_item tool\n";
@@ -90,6 +130,31 @@ function buildAIContext($book, $itemId) {
     $context .= "2. When user adds details about existing character → Call update_character with character_id\n";
     $context .= "3. When discussing characters, use read_characters first to see what exists\n";
     $context .= "4. Example: User says 'Sarah is a tough detective' → create_character with name='Sarah', role='protagonist', personality='tough detective'\n\n";
+
+    $context .= "LOCATIONS:\n";
+    $context .= "1. When user first mentions a location → Immediately call create_location with available details\n";
+    $context .= "2. When user adds details about existing location → Call update_location with location_id\n";
+    $context .= "3. Example: User says 'They meet in a dusty old library' → create_location with name='Old Library', atmosphere='dusty, quiet, mysterious'\n\n";
+
+    $context .= "PLOT THREADS:\n";
+    $context .= "1. When user wants to track a storyline → Call create_plot_thread\n";
+    $context .= "2. When a plot thread is resolved in the story → Call update_plot_thread with status='resolved'\n";
+    $context .= "3. Use read_plot_threads to see what threads need resolution\n\n";
+
+    $context .= "=== AUTOMATIC STATUS MANAGEMENT ===\n";
+    $context .= "Proactively manage item status to help track progress:\n";
+    $context .= "1. When you finish writing a scene for the user → Call update_binder_item to set status='done'\n";
+    $context .= "2. When user asks to outline a new scene → Call create_binder_item with status='to_do'\n";
+    $context .= "3. When actively writing/editing → Call update_binder_item to set status='in_progress'\n";
+    $context .= "4. After revisions → Set status='revised'\n\n";
+
+    $context .= "=== METADATA TAGGING ===\n";
+    $context .= "Automatically tag scenes with metadata when context is clear:\n";
+    $context .= "- POV: Who's perspective (e.g., 'Sarah', 'Third Person Limited')\n";
+    $context .= "- Setting: Where the scene takes place (e.g., 'Old Library', 'Mars Colony')\n";
+    $context .= "- Subplot: Which plot thread (if applicable)\n";
+    $context .= "- Tone: Mood of the scene (e.g., 'tense', 'romantic', 'action-packed')\n";
+    $context .= "Example: update_binder_item with metadata={'POV': 'Sarah', 'Setting': 'Old Library', 'Tone': 'mysterious'}\n\n";
 
     $context .= "After tools execute, respond based on the result the tool returns.\n\n";
 
