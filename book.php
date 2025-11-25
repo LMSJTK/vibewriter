@@ -58,6 +58,8 @@ $currentMetadata = $currentItem ? getItemMetadata($currentItem['id']) : [];
         <div class="navbar-right">
             <button class="btn btn-sm" onclick="toggleAIChat()">💬 AI Assistant</button>
             <button class="btn btn-sm" onclick="showCharactersPanel()">👥 Characters</button>
+            <button class="btn btn-sm" onclick="window.location.href='locations.php?id=<?php echo $bookId; ?>'">🗺️ Locations</button>
+            <button class="btn btn-sm" onclick="window.location.href='plot_threads.php?id=<?php echo $bookId; ?>'">🧵 Plot Threads</button>
             <button class="btn btn-sm" onclick="toggleVibePanel()">🎵 Vibe</button>
             <button class="btn btn-sm" onclick="showExportModal()">📤 Export</button>
         </div>
